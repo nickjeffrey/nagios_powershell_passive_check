@@ -215,4 +215,4 @@ define service {
 
 
 # Sample Output
-<a img src=images/passive_check.png>
+<img src=images/passive_check.png>

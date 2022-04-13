@@ -35,6 +35,7 @@ Add the following to the commands.cfg file
 ;
 define command {
   ;Command changes a stale host from OK to UNKNOWN 0=ok 1=warn 2=critical 3=unknown
+  ; yum install nagios-plugins-dummy
    command_name    stale_check
    command_line    /usr/local/nagios/libexec/check_dummy 3 "Passive check results are stale.  Please confirm the passive checks are being submitted."
 }
@@ -47,7 +48,40 @@ define command {
 
 
 ```
+# Define service templates in services.cfg
+```
+define service{
+        register                        0
+        name                            passive-24x7-service
+        use                             generic-service ; Name of service template to use
+        check_command                   stale_check     ; When service becomes stale this check will be run to change the state to stale.
+        max_check_attempts              1               ; Fail service immediately after first active stale check instead of waiting for several minutes
+        check_interval                  1               ; A service is considered stale when freshness_threshold (in seconds) is reached.
+                                                        ; Set check_interval to 1 to run the stale check as soon as the freshness threshold is reached.
+        initial_state                   o               ; Assume initial service state is OK
+        active_checks_enabled           0               ; Disable active checks of this service
+        passive_checks_enabled          1               ; Enable passive checks and ensure it is checked for freshness.
+        check_freshness                 1               ; Change default from off to on for passive checks
+        freshness_threshold             900             ; Mark service as stale if no passive check results have been received for 60x15=900 seconds
+        }
 
+define service{
+        register                        0
+        name                            passive-8x5-service
+        use                             generic-service ; Name of service template to use
+        check_command                   stale_check     ; When service becomes stale this check will be run to change the state to stale.
+        max_check_attempts              1               ; Fail service immediately after first active stale check instead of waiting for several minutes
+        check_interval                  1               ; A service is considered stale when freshness_threshold (in seconds) is reached.
+                                                        ; Set check_interval to 1 to run the stale check as soon as the freshness threshold is reached.
+        initial_state                   o               ; Assume initial service state is OK
+        active_checks_enabled           0               ; Disable active checks of this service
+        passive_checks_enabled          1               ; Enable passive checks and ensure it is checked for freshness.
+        check_freshness                 1               ; Change default from off to on for passive checks
+        freshness_threshold             900             ; Mark service as stale if no passive check results have been received for 60x15=900 seconds
+        notification_period             8x5
+        }
+
+```
 # Define nagios contacts in contacts.cfg
 You will need to define a contact in nagios for each host.  Unlike a typical nagios contact that is used for sending email alerts, these contacts are used to determine which credentials are used when submitting the passive check to nagios web interface.
 ```

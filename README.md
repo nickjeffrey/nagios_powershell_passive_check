@@ -1,7 +1,13 @@
 # nagios_powershell_passive_check
 nagios passive check for Windows hosts using PowerShell
 
-# Notes
+# Create Scheduled Task on monitored host
+The assumption here is that the nagios server does have a method to connect to the monitored Windows hosts to perform active checks via SSH, WMI, NRPE, etc.  For this reason, a PowerShell script will execute from a Scheduled Task on the monitored Windows host(s) that submits passive checks to the nagios server via HTTP.
+The PowerShell script runs in the security context of the LOCALSYSTEM account, which exists by default on all Windows hosts.  This is a good account to use because it does not require creation of local or domain user accounts on each Windows host, and the LOCALSYSTEM account has zero rights to any network resources, so it cannot be used for lateral system compromise or exploitation.
+Create the scheduled task with a command similiar to:
+```
+schtasks.exe /create /S %computername% /RU SYSTEM /SC minute /MO 5 /TN nagios_passive_check /TR "powershell.exe c:\path\to\nagios_passive_check.ps1"
+```
 
 
 # Create apache htpasswd entries

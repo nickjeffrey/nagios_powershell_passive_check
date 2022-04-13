@@ -212,3 +212,7 @@ define service {
 # END OF PASSIVE CHECKS
 ###############################################
 ```
+
+
+# Sample Output
+<a img src=images/passive_check.png>

@@ -2,10 +2,9 @@
 
 #OUTSTANDING TASKS
 #-----------------
-# get into a git repo
 # figure where to put the ps1 file and how to schedule
 # The user account running this script likely needs admin rights.  Fix up the documentation referring to low privileged user.
-
+# Get rid of the hardcoded $nagios_server variable, and put in the htpasswd.txt file 
 
 # CHANGE LOG
 # ----------
@@ -26,7 +25,7 @@
 # To revoke HTTP authentication for a monitored host, use this syntax on the nagios server:
 #   htpasswd -D /etc/nagios/htpasswd.users host1
 #
-# This powershell script should be scheduled to execute every 5 minutes from a low-privileged userid.
+# This powershell script should be scheduled to execute every 5 minutes from the LOCALSYSTEM account.
 # If the monitored host is part of an Active Directory domain, create a low-privileged userid called "nagios" with a strong password.
 # You can also deny the Interactive login privilege to that userid for added security.
 #
@@ -1652,7 +1651,11 @@ function Get-Console-User {
    $service = "ConsoleLogon"                    #name of check defined on nagios server
    #
    try {
-      $ConsoleUser = query user
+      # The expected output of this command is empty if there is no user logged in at th console.
+      # If there is a user logged in at the console (but not via RDP), the output will look similar to:
+      # SOMEDOMAIN\someusername
+      #
+      $ConsoleUser = (Get-WMIObject -ClassName Win32_ComputerSystem).Username
    }
    catch {
       Write-Host "Access denied.  Please check your permissions."
@@ -1665,10 +1668,8 @@ function Get-Console-User {
    #
    # We only get this far if $ConsoleUser contains data
    #
-   $ConsoleUser = $ConsoleUser -match 'console'     #parse out the line containing the console session
-   $ConsoleUser = $ConsoleUser -replace '^>'        #remove the > character at the beginning of the line
-   $ConsoleUser = $ConsoleUser -replace ' +.*'      #remove everything after the username
-   if (!$ConsoleUser) {$ConsoleUser = "none"}       #if $ConsoleUser is empty or undefined at this point, put in a value of "none" to indicate no one is logged in
+   $ConsoleUser = $ConsoleUser -replace '^.*\\'      #change DOMAIN\username to username
+   if (!$ConsoleUser) {$ConsoleUser = "none"}        #if $ConsoleUser is empty or undefined at this point, put in a value of "none" to indicate no one is logged in
    #
    # At this point, we have the username logged in at the console.
    # Now let's decide if this is the user that *should* be logged in, which is somewhat site-dependent.
@@ -1678,9 +1679,9 @@ function Get-Console-User {
    # $RequiredUser=janedoe means return OK if only the janedoe user is logged in at the console
    # Please uncomment the appropriate $RequiredUser line for your specific environment
    #
-   #$RequiredUser = "janedoe"                          #return ok only if janedoe is logged in
+   $RequiredUser = "administrator"                          #return ok only if janedoe is logged in
    #$RequiredUser = "any"                              #return ok if any user is logged in (comment out this line if previous line is being used)
-   $RequiredUser = "none"                              #return ok if no   user is logged in (comment out this line if previous line is being used)
+   #$RequiredUser = "none"                              #return ok if no   user is logged in (comment out this line if previous line is being used)
    if ($verbose -eq "yes") { Write-Host "   ConsoleUser=$ConsoleUser RequiredUser=$RequiredUser" }
    #
    # submit nagios passive check results
@@ -1711,7 +1712,7 @@ function Get-Console-User {
    }
    if ($RequiredUser -ne "none" -and $RequiredUser -ne "any" -and $RequiredUser -eq $ConsoleUser) {
       $plugin_state = 0                          #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service OK - The $RequiredUser is logged in at the console."
+      $plugin_output = "$service OK - The $RequiredUser user is logged in at the console."
    }
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
    Submit-Nagios-Passive-Check

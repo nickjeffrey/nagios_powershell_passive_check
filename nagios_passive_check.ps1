@@ -74,7 +74,6 @@
 $user          = ""								#will be defined in Sanity-Checks function
 $htpasswd      = ""								#htpasswd used to authenticate against nagios web server, read from external file in Sanity-Checks function
 $nagios_server = "nagios.example.com"						#adjust as appropriate to point at nagios server FQDN
-$nagios_server = "nyxmon1.nyx.local"						#adjust as appropriate to point at nagios server FQDN
 if ($nagios_server -match '(^[\w-_\d]+)\.(.*)') { $dns_suffix = $matches[2]}    #if $nagios_server is a FQDN, parse out the DNS suffix  ($matches is a built-in Powershell array)
 $cmd_cgi       = "/nagios/cgi-bin/cmd.cgi"					#URI for cmd.cgi script on nagios server
 $url           = "http://${nagios_server}${cmd_cgi}"				#concatenate above two variables together to form the URL to cmd.cgi on the nagios server

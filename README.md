@@ -6,26 +6,28 @@ The assumption here is that the nagios server does have a method to connect to t
 The PowerShell script runs in the security context of the LOCALSYSTEM account, which exists by default on all Windows hosts.  This is a good account to use because it does not require creation of local or domain user accounts on each Windows host, and the LOCALSYSTEM account has zero rights to any network resources, so it cannot be used for lateral system compromise or exploitation.
 Create the scheduled task with a command similiar to:
 ```
-schtasks.exe /create /S %computername% /RU SYSTEM /SC minute /MO 5 /TN nagios_passive_check /TR "powershell.exe c:\path\to\nagios_passive_check.ps1"
+schtasks.exe /create /S %computername% /RU SYSTEM /SC minute /MO 5 /TN nagios_passive_check /TR "powershell.exe c:\progra~1\nagios\libexec\nagios_passive_check.ps1"
+```
+
+# Create config file  on monitored host
+You must create the c:\progra~1\nagios\libexec\nagios_passive_check.cfg config file on the monitored host.  This config file will contain your site-specific details for the hostname/IP of the nagios server, the host_name of the monitored host as defined in the hosts.cfg file on the nagios server, and the htpasswd credential that will be used to authenticate against the nagios CGI interface.  For example:
+```
+nagios_server=nagios.example.com
+host_name=server01
+htpasswd=SecretPass1
 ```
 
 
-# Create apache htpasswd entries
+# Create apache htpasswd entries on nagios server
 Each host submitting passive checks will need to provide credentials to access the nagios web interface.
 For example, if there are 3 different hosts submitting passive checks, you would create the following HTTP credentials:
 ```
-htpasswd -b /etc/nagios/htpasswd.users host1 SecretPass1
-htpasswd -b /etc/nagios/htpasswd.users host2 SecretPass2
-htpasswd -b /etc/nagios/htpasswd.users host3 SecretPass3
+htpasswd -b /etc/nagios/htpasswd.users server01 SecretPass1
+htpasswd -b /etc/nagios/htpasswd.users server02 SecretPass2
+htpasswd -b /etc/nagios/htpasswd.users server03 SecretPass3
 ```
 
 
-# Client side authentication
-The powershell script will look for user credentials in the htpasswd.txt file located in the same directory as the powershell script.
-For example, if the htpasswd entry created in the previous step was "SecretPass1", create a file called htpasswd.txt in the same directory as the powershell script with the following content:
-```
-SecretPass1
-```
 
 # Define commands in commands.cfg
 Add the following to the commands.cfg file 

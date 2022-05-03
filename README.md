@@ -2,7 +2,7 @@
 nagios passive check for Windows hosts using PowerShell
 
 # Copy files to monitored host
-Copy the *.ps1 and *.cfg files to c:\Program Files\nagios\libexec\*
+Copy the *.ps1 and *.cfg files to c:\Program Files\nagios\libexec\
 
 # Create Scheduled Task on monitored host
 The assumption here is that the nagios server does have a method to connect to the monitored Windows hosts to perform active checks via SSH, WMI, NRPE, etc.  For this reason, a PowerShell script will execute from a Scheduled Task on the monitored Windows host(s) that submits passive checks to the nagios server via HTTP.

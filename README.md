@@ -1,7 +1,7 @@
 # nagios_powershell_passive_check
 nagios passive check for Windows hosts using PowerShell
 
-# Copy files to monitoed host
+# Copy files to monitored host
 Copy the *.ps1 and *.cfg files to c:\Program Files\nagios\libexec\*
 
 # Create Scheduled Task on monitored host

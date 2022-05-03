@@ -13,7 +13,7 @@ schtasks.exe /create /S %computername% /RU SYSTEM /SC minute /MO 5 /TN nagios_pa
 ```
 
 # Create config file  on monitored host
-You must create the c:\progra~1\nagios\libexec\nagios_passive_check.cfg config file on the monitored host.  This config file will contain your site-specific details for the hostname/IP of the nagios server, the host_name of the monitored host as defined in the hosts.cfg file on the nagios server, and the htpasswd credential that will be used to authenticate against the nagios CGI interface.  For example:
+You must edit the c:\progra~1\nagios\libexec\nagios_passive_check.cfg config file on the monitored host.  This config file will contain your site-specific details for the hostname/IP of the nagios server, the host_name of the monitored host as defined in the hosts.cfg file on the nagios server, and the htpasswd credential that will be used to authenticate against the nagios CGI interface.  For example:
 ```
 nagios_server=nagios.example.com
 host_name=server01

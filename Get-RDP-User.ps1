@@ -11,7 +11,7 @@ function Get-RDP-User {
    # SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE
    #  services                                    0  Disc
    #  console                                     1  Conn
-   # >rdp-tcp#40        MYDOMAIN\Administrator    7  Active
+   # >rdp-tcp#40        MYDOMAIN\Administrator    7  Active  rdpwd
    #  31c5ce94259d4...                        65536  Listen
    #  rdp-tcp                                 65537  Listen   #
    #
@@ -37,6 +37,7 @@ function Get-RDP-User {
    $RDPUser = $RDPUser -replace '>'                      #replace leading > character
    $RDPUser = $RDPUser -replace '^\s+'                   #replace leading spaces
    $RDPUser = $RDPUser -replace 'rdp-tcp#\d+\s+'         #replace leading rdp-tcp#[0-9]+ characters
+   $RDPUser = $RDPUser -replace '\s+\d+\s+Active\s+rdpwd\s+'     #replace trailing characters
    $RDPUser = $RDPUser -replace '\s+\d+\s+Active\s+'     #replace trailing characters
    $RDPUser = $RDPUser -replace '^.*\\'                  #change DOMAIN\username to username
    if (!$RDPUser) {$RDPUser = "none"}                    #if $ConsoleUser is empty or undefined at this point, put in a value of "none" to indicate no one is logged in

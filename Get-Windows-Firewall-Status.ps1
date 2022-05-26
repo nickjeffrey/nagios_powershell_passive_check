@@ -1,3 +1,11 @@
+# powershell function to perform check on local machine
+# this script is called from the master nagios_passive_check.ps1 script
+# the results of this check are submitted to the nagios server as a passive check via HTTP
+
+# CHANGE LOG
+# ----------
+# 2022-05-25	njeffrey	Script created
+
 function Get-Windows-Firewall-Status {
    #
    if ($verbose -eq "yes") { Write-Host "" ; Write-Host "Running Get-Windows-Firewall-Status function" }
@@ -45,4 +53,7 @@ function Get-Windows-Firewall-Status {
       return                                                            #break out of function
    }
 } 											#end of function
-
+#
+# call the above function
+#
+Get-Windows-Firewall-Status

@@ -1,3 +1,11 @@
+# powershell function to perform check on local machine
+# this script is called from the master nagios_passive_check.ps1 script
+# the results of this check are submitted to the nagios server as a passive check via HTTP
+
+# CHANGE LOG
+# ----------
+# 2022-05-25	njeffrey	Script created
+
 function Get-Disk-Space-Utilization {
    #
    if ($verbose -eq "yes") { Write-Host "" ; Write-Host "Running Get-Disk-Space-Utilization function" }
@@ -78,3 +86,7 @@ function Get-Disk-Space-Utilization {
       }								#end of if blcok
    }								#end of foreach block
 }								#end of function
+#
+# call the above function
+#
+Get-Disk-Space-Utilization

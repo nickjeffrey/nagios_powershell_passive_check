@@ -1,3 +1,13 @@
+# powershell function to perform check on local machine
+# this script is called from the master nagios_passive_check.ps1 script
+# the results of this check are submitted to the nagios server as a passive check via HTTP
+
+# CHANGE LOG
+# ----------
+# 2022-05-25	njeffrey	Script created
+
+
+
 # xxxx - to be added - confirm email notification is enabled
 # Future enhancement: Veeam BR 9.5 does not have a method to globally enable email notifications from powershell.  One workaround is New-VBRNotificationOptions on a job-by-job basis.
 # https://forums.veeam.com/powershell-f26/enable-disable-global-e-mail-notifications-setting-t42726.html
@@ -348,3 +358,7 @@ function Get-Veeam-Health {
       return                                                            #break out of function
    }   
 } 											#end of function
+#
+# call the above function
+#
+Get-Veeam-Health

@@ -1,10 +1,12 @@
 # Powershell script to submit passive check results to nagios via HTTP
+#
+# This is the "master" script that sets up the HTTP authentication to the nagios server, 
+# and calls additional *.ps1 scripts in the same folder that perform the individual nagios checks.
+
 
 #OUTSTANDING TASKS
 #-----------------
-# figure where to put the ps1 file and how to schedule
-# The user account running this script likely needs admin rights.  Fix up the documentation referring to low privileged user.
-# Get rid of the hardcoded $nagios_server variable, and put in the htpasswd.txt file 
+
 
 # CHANGE LOG
 # ----------
@@ -13,6 +15,8 @@
 # 2022-04-12	njeffrey	Add Get-Console-User function
 # 2022-04-12	njeffrey	Ignore domain machine accounts in Get-Windows-Failed-Logins, only look at user accounts
 # 2022-04-12	njeffrey	Add Get-Scheduled-Task function
+# 2022-05-25	njeffrey	Break out functions into external script files to make maintenance easier
+# 2022-05-25	njeffrey	Move authentication details into external *.cfg file
 
 
 # NOTES
@@ -26,15 +30,10 @@
 #   htpasswd -D /etc/nagios/htpasswd.users host1
 #
 # This powershell script should be scheduled to execute every 5 minutes from the LOCALSYSTEM account.
-# If the monitored host is part of an Active Directory domain, create a low-privileged userid called "nagios" with a strong password.
-# You can also deny the Interactive login privilege to that userid for added security.
+# Running this script as LOCALSYSTEM means you do not have to create a service user account, but it does mean that only local machine resources can be checked.
 #
-# If the monitored host is not joined to an Active Directory, create a local user account named "nagios".  For example:
-#   net user nagios SomeSuperSecretComplexPassword1! /comment:"service account to submit passive checks to nagios server" /add
-#   cusrmgr -u nagios +s PasswordNeverExpires
-#   **** grant user the "Logon as a batch job" privilege.  Secpol.msc, Security Settings, Local Policies, User Rights Assignment, Logon as a batch job
 # Schedule this script to run every 5 minutes:
-#  schtasks.exe /create /S %computername% /RU SYSTEM /SC minute /MO 5 /TN nagios_passive_check /TR "powershell.exe c:\temp\nagios_passive_check.ps1"
+#  schtasks.exe /create /S %computername% /RU SYSTEM /SC minute /MO 5 /TN nagios_passive_check /TR "powershell.exe c:\progra~1\nagios\libexec\nagios_passive_check.ps1"
 
 
 # ASSUMPTIONS
@@ -72,11 +71,10 @@
 
 # declare variables
 $user          = ""								#will be defined in Sanity-Checks function
-$htpasswd      = ""								#htpasswd used to authenticate against nagios web server, read from external file in Sanity-Checks function
-$nagios_server = "nagios.example.com"						#adjust as appropriate to point at nagios server FQDN
-if ($nagios_server -match '(^[\w-_\d]+)\.(.*)') { $dns_suffix = $matches[2]}    #if $nagios_server is a FQDN, parse out the DNS suffix  ($matches is a built-in Powershell array)
+$htpasswd      = ""								#htpasswd used to authenticate against nagios web server, read from external file in Read-Config-File
+$nagios_server = "" 								#hostname of nagios server, read from external file in Read-Config-File
 $cmd_cgi       = "/nagios/cgi-bin/cmd.cgi"					#URI for cmd.cgi script on nagios server
-$url           = "http://${nagios_server}${cmd_cgi}"				#concatenate above two variables together to form the URL to cmd.cgi on the nagios server
+#$url           = "http://${nagios_server}${cmd_cgi}"				#full URL to nagios web interface, will be defined after $nagios_server is read from external file in Read-Config-File
 $cmd_typ       = 30								#30 = submit passive check results
 $cmd_mod       = 2
 $passive_host  = ""								#name of the host as defined in hosts.cfg on nagios server.  Will be defined in Sanity-Checks function
@@ -87,15 +85,114 @@ $verbose       = "yes"								#yes|no flag to increase verbosity for debugging
 
 
 
-function Sanity-Checks {
+
+function Read-Config-File {
    #
-   if ($verbose -eq "yes") { Write-Host "Running Sanity-Checks function" }
+   if ($verbose -eq "yes") { Write-Host "Running Read-Config-File function" }
+   #
+   # Site-specific details are stored in a config file that looks similar to the following:
+   #nagios_server=mynagios01.example.com
+   #passive_host=serv01.example.com
+   #http_user=serv01
+   #htpasswd=SecretPasswordForHTTPauth
+   #
+   #
+   # Confirm the config file exists
+   #
+   $configfile = "$PSScriptRoot\nagios_passive_check.cfg"
+   if (-Not(Test-Path $configfile -PathType leaf)) { 					#exit script if file does not exist
+      Write-Host "ERROR: Cannot find $configfile config file - exiting script"
+      Write-Host "Please create file $configfile with the following contents:"
+      Write-Host "nagios_server=mynagios01.example.com"
+      Write-Host "passive_host=ThisMonitoredHost.example.com"
+      Write-Host "http_user=ThisMonitoredHost"
+      Write-Host "htpasswd=SomeSecretPasswordForHTTPauth"
+      exit 
+   }				
+   #
+   #
+   # Figure out the hostname/IPaddr of the nagios server that passive checks will be sent to 
+   #
+   $nagios_server = Get-Content $configfile						#slurp in the entire file contents
+   $nagios_server = $nagios_server -match   '^nagios_server='				#parse out the interesting line of the multiline file
+   $nagios_server = $nagios_server -replace '^nagios_server='				#remove the nagios_server= portion, leaving just the hostname
+   if (!$nagios_server) { Write-Host "ERROR: Cannot find nagios_server=nagios01.example.com line in config file $configfile - exiting script" ; exit }  #problem if $nagios_server is blank or undefined
+   if ($verbose -eq "yes") { Write-Host "   Found nagios_server=$nagios_server" }				
+   #
+   # By default, powershell variables are only available inside the current fuction.
+   # Since we want the $nagios_server variable to be available throughout this script, change its scope.
+   # The available scopes are: global, local, private, script, using, workflow
+   $script:nagios_server = $nagios_server
+   #
+   #
+   #
+   # Figure out the name of the local machine that will be submitting passive checks to the $nagios_server via HTTP
+   # In theory, the local hostname *should* match the host definition in the hosts.cfg file on the nagios server, but we should not assume.
+   # For example, some nagios sysadmins populate the hosts.cfg with the FQDN of each monitored host, and some just use the short hostname.
+   # To avoid making assumptions, we we take the value from the passive_host=somehost.example.com line in the $configfile config file.
+   # 
+   $passive_host = Get-Content $configfile						#slurp in the entire file contents
+   $passive_host = $passive_host -match   '^passive_host='				#parse out the interesting line of the multiline file
+   $passive_host = $passive_host -replace '^passive_host='				#remove the passive_host= portion, leaving just the hostname
+   $passive_host = "$passive_host"  							#convert array to string
+   if (!$passive_host) { Write-Host "ERROR: Cannot find passive_host=mypassivehost.example.com line in config file $configfile - exiting script" ; exit }  #problem if $passive_host is blank or undefined
+   if ($verbose -eq "yes") { Write-Host "   Found passive_host=$passive_host" }				
+   #
+   # By default, powershell variables are only available inside the current fuction.
+   # Since we want the $nagios_server variable to be available throughout this script, change its scope.
+   # The available scopes are: global, local, private, script, using, workflow
+   $script:passive_host = $passive_host
+   #
+   #
+   #
+   #
+   #
+   # Figure out the web server username that will be used for HTTP authentication 
+   # In theory, the $http_user should be the same as the $passive_host, but some nagios sysadmins with multiple DNS suffixes 
+   # will define the host entries using the FQDN, but will use a short hostname in the htpasswd file.
+   # To avoid making assumptions, we we take the value from the passive_user=somehost line in the $configfile config file.
+   # 
+   $http_user = Get-Content $configfile						#slurp in the entire file contents
+   $http_user = $http_user -match   '^http_user='				#parse out the interesting line of the multiline file
+   $http_user = $http_user -replace '^http_user='				#remove the http_user= portion, leaving just the username used in the htpasswd file
+   $http_user = "$http_user"  							#convert array to string
+   if (!$http_user) { Write-Host "ERROR: Cannot find http_user=myserver line in config file $configfile - exiting script" ; exit }  #problem if $http_user is blank or undefined
+   if ($verbose -eq "yes") { Write-Host "   Found http_user=$http_user" }				
+   #
+   # By default, powershell variables are only available inside the current fuction.
+   # Since we want the $nagios_server variable to be available throughout this script, change its scope.
+   # The available scopes are: global, local, private, script, using, workflow
+   $script:http_user = $http_user
+   #
+   #
+   #
+   # HTTP basic authentication credentials are needed to submit the passive check to nagios web server at $url
+   # There must be an entry in the /etc/nagios/htpasswd file containing the hostname of this machine and a password used for HTTP auth to $url
+   # This section reads the contents of the htpasswd.txt file in the same directory as this script
+   $htpasswd = Get-Content $configfile						#slurp in the entire file contents
+   $htpasswd = $htpasswd -match   '^htpasswd='					#parse out the interesting line of the multiline file
+   $htpasswd = $htpasswd -replace '^htpasswd='					#remove the htpasswd= portion, leaving just the password
+   $htpasswd = "$htpasswd"  							#convert array to string
+   if (!$htpasswd) { Write-Host "ERROR: Cannot find htpasswd=xxxxx line in config file $configfile - exiting script" ; exit }  #problem if $htpasswd is blank or undefined
+   if ($verbose -eq "yes") { Write-Host "   HTTP auth credentials are ${http_user}:${htpasswd}" }
+   #
+   # By default, powershell variables are only available inside the current fuction.
+   # Since we want the $htpasswd variable to be available throughout this script, change its scope.
+   # The available scopes are: global, local, private, script, using, workflow
+   $script:htpasswd = $htpasswd
+}										#end of function
+
+
+
+function Ping-Nagios-Server {
+   #
+   if ($verbose -eq "yes") { Write-Host "Running Ping-Nagios-Server function" }
    #
    # Confirm the nagios server responds to ping
    #
    if ($verbose -eq "yes") { Write-Host "   attempting to ping nagios server $nagios_server" }
    try { 
-      Test-Connection -Count 4 -Quiet  -ErrorAction Stop $nagios_server
+      Test-Connection -Count 4 -Quiet -ErrorAction Stop $nagios_server
    }
    catch { 
       Write-Host "ERROR: insufficient permissions to run Test-Connection powershell module.  Exiting script."
@@ -108,69 +205,7 @@ function Sanity-Checks {
       Write-Host "ERROR: Cannot ping nagios server $nagios_server , exiting script."
       exit 									#exit script
    }
-   #
-   #
-   #
-   # Figure out the hostname of the local machine, which will be used in two places:
-   #    - HTTP username passed to nagios webserver to be authenticated by htpasswd
-   #    - value of "define host" on nagios server in hosts.cfg file
-   # This will match a defined contact in contacts.cfg on the nagios server, and a defined host in hosts.cfg on the nagios server
-   # To keep things consistent, we use the DNS hostname of the local machine.
-   if ($verbose -eq "yes") { Write-Host "   attempting to determine local hostname" }
-   try { 
-      $user = $(Get-WmiObject Win32_Computersystem -ErrorAction Stop).name
-      $user = $user.ToLower()						#convert to lowercase
-      #
-      # By default, powershell variables are only available inside the current fuction.
-      # Since we want the $passive_host variable to be available throughout this script, change its scope.
-      # The available scopes are: global, local, private, script, using, workflow
-      $script:user = $user
-   }
-   catch {
-      Write-Host "ERROR: insufficient permissions to run Get-WmiObject powershell module.  Exiting script."
-      exit 
-   }
-   # we only get this far if Get-WmiObject was successful in the previous section
-   #   
-   if ( $user = $(Get-WmiObject Win32_Computersystem -ErrorAction Stop).name) {
-      $user         = $user.ToLower()						#convert to lowercase
-      $passive_host = "$user.$dns_suffix"					#if host definition on nagios server includes domain suffix
-      if ($verbose -eq "yes") { Write-Host "   local hostname is $user , FQDN is $passive_host" }
-      #
-      # By default, powershell variables are only available inside the current fuction.
-      # Since we want the $passive_host variable to be available throughout this script, change its scope.
-      # The available scopes are: global, local, private, script, using, workflow
-      $script:passive_host = $passive_host
-   } else {
-      Write-Host "ERROR: Cannot determine local hostname.  Please check WMI permissions. Exiting script."
-      exit 
-   }
-   #
-   #
-   #
-   # HTTP basic authentication credentials are needed to submit the passive check to nagios web server at $url
-   # There must be an entry in the /etc/nagios/htpasswd file containing the hostname of this machine and a password
-   # This section reads the contents of the htpasswd.txt file in the same directory as this script
-   $fileToCheck = "$PSScriptRoot\htpasswd.txt"
-   if (-Not(Test-Path $fileToCheck -PathType leaf)) { 					#exit script if file does not exist
-      Write-Host "ERROR: Cannot find $fileToCheck file containing HTTP authentication password - exiting script"
-      exit 
-   }				
-   if (Test-Path $fileToCheck -PathType leaf) {	      					#check to see if the file exists
-      # $fileToCheck must be nonzero in length, lines beginning with # will be ignored
-      Get-Content $PSScriptRoot\htpasswd.txt -ErrorAction Stop | Where-Object {$_.length -gt 0} | Where-Object {!$_.StartsWith("#")} | ForEach-Object { $htpasswd = $_ }
-      if ($verbose -eq "yes") { Write-Host "   HTTP auth credentials are ${user}:${htpasswd}" }
-      #
-      # By default, powershell variables are only available inside the current fuction.
-      # Since we want the $passive_host variable to be available throughout this script, change its scope.
-      # The available scopes are: global, local, private, script, using, workflow
-      $script:htpasswd = $htpasswd
-   }
-}											#end of function
-
-
-
-
+}										#end of function
 
 
 
@@ -180,8 +215,11 @@ function Submit-Nagios-Passive-Check {
    #
    if ($verbose -eq "yes") { Write-Host "   Running Submit-Nagios-Passive-Check function"  }
    #
+   # Define the URL for the nagios server web interface that will accept the passive checks via HTTP
+   $url = "http://${nagios_server}${cmd_cgi}" 
+   #
    # Generate the HTTP basic authentication credentials
-   $pair            = "$($user):$($htpasswd)"									#join as username:password
+   $pair            = "$($http_user):$($htpasswd)"								#join as username:password
    $encodedCreds    = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($pair))         	#Invoke-WebRequest wants BASE64 encoded username:password
    $basicAuthValue  = "Basic $encodedCreds"
    $Headers         = @{Authorization = $basicAuthValue}
@@ -206,31 +244,36 @@ function Submit-Nagios-Passive-Check {
       Write-Host $plugin_output								#this is what the output would look like for a nagios active check
       Write-Host "OK HTTP 200 Passive check submitted successfully for $service" 
    } elseif ( $StatusCode -eq "401" ) { 
-      Write-Host "ERROR: HTTP 401 Unathorized.  Please confirm the htpasswd credentials ${user}:${htpasswd} are valid for HTTP basic authentication." 
+      Write-Host "ERROR: HTTP 401 Unathorized.  Please confirm the htpasswd credentials ${http_user}:${htpasswd} are valid for HTTP basic authentication." 
    } else { Write-Host "UNKNOWN HTTP $StatusCode response.  Please check the username:password used to submit this passive check to the nagios server." }
 }
 
 
 
 
-# ----------------- main body of script ------------------------
-Sanity-Checks
 
-#$external_function="Get-Processor-Utilization"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Processor-Utilization             }
-#$external_function="Get-Paging-Utilization"                ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Paging-Utilization                }
-#$external_function="Get-Disk-Space-Utilization"            ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Disk-Space-Utilization            }
-#$external_function="Get-Uptime"                            ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Uptime                            }
- $external_function="Get-LastWindowsUpdate"                 ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-LastWindowsUpdate                 }
- $external_function="Get-Disk-SMART-Health"                 ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Disk-SMART-Health                 }
- $external_function="Get-Disk-RAID-Health"                  ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Disk-RAID-Health                  }
- $external_function="Get-Disk-Latency-IOPS"                 ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Disk-Latency-IOPS                 }
- $external_function="Get-Windows-Failed-Logins"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Windows-Failed-Logins             }
- $external_function="Get-Windows-Defender-Antivirus-Status" ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Windows-Defender-Antivirus-Status }
- $external_function="Get-Windows-Firewall-Status"           ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Windows-Firewall-Status           }
- $external_function="Get-HyperV-Replica-Status"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-HyperV-Replica-Status             }
- $external_function="Get-TSM-Client-Backup-Age"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-TSM-Client-Backup-Age             }
- $external_function="Get-Veeam-Health"                      ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Veeam-Health                      }
- $external_function="Get-Veeam-365-Health"                  ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Veeam-365-Health                  }
- $external_function="Get-Console-User"                      ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Console-User                      }
- $external_function="Get-RDP-User"                          ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-RDP-User                          }
- $external_function="Get-Scheduled-Task-001"                ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename ;  Get-Scheduled-Task-001               }
+# ----------------- main body of script ------------------------
+Read-Config-File
+Ping-Nagios-Server
+#exit
+#
+# call external scripts in the current directory
+#
+#$external_function="Get-Processor-Utilization"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+#$external_function="Get-Paging-Utilization"                ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+#$external_function="Get-Disk-Space-Utilization"            ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+#$external_function="Get-Uptime"                            ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-LastWindowsUpdate"                 ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Disk-SMART-Health"                 ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Disk-RAID-Health"                  ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Disk-Latency-IOPS"                 ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Windows-Failed-Logins"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Windows-Defender-Antivirus-Status" ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Windows-Firewall-Status"           ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-HyperV-Replica-Status"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-TSM-Client-Backup-Age"             ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Veeam-Health"                      ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Veeam-365-Health"                  ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Console-User"                      ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-RDP-User"                          ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Scheduled-Task-001"                ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }

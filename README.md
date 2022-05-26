@@ -136,6 +136,42 @@ define service {
    contacts               myhost01              ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
 }
 
+# Define service for passive check for CPU utilization
+define service {
+   use                    passive-8x5-service
+   host_name              myhost01.example.com
+   service_description    CPU util      ; Name of service passive check will reference when sending passive check results to nagios server
+   contact_groups         admins                ; Who receives notifications for this service
+   contacts               myhost01              ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
+}
+
+# Define service for passive check for pagefile utilization
+define service {
+   use                    passive-8x5-service
+   host_name              myhost01.example.com
+   service_description    pagefile              ; Name of service passive check will reference when sending passive check results to nagios server
+   contact_groups         admins                ; Who receives notifications for this service
+   contacts               myhost01              ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
+}
+
+# Define service for passive check for Drive C: utilization
+define service {
+   use                    passive-8x5-service
+   host_name              myhost01.example.com
+   service_description    Drive C:              ; Name of service passive check will reference when sending passive check results to nagios server
+   contact_groups         admins                ; Who receives notifications for this service
+   contacts               myhost01              ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
+}
+
+# Define service for passive check for uptime
+define service {
+   use                    passive-8x5-service
+   host_name              myhost01.example.com
+   service_description    uptime                ; Name of service passive check will reference when sending passive check results to nagios server
+   contact_groups         admins                ; Who receives notifications for this service
+   contacts               myhost01              ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
+}
+
 # Define service for passive check for Disk SMART health metrics
 define service {
    use                    passive-24x7-service

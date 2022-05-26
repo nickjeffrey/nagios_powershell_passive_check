@@ -6,17 +6,20 @@ Copy the *.ps1 and *.cfg files to c:\Program Files\nagios\libexec\
 
 # Create Scheduled Task on monitored host
 The assumption here is that the nagios server does not have a method to initiation connections to the monitored Windows hosts to perform active checks via SSH, WMI, NRPE, etc.  For this reason, a PowerShell script will execute from a Scheduled Task on the monitored Windows host(s) that submits passive checks to the nagios server via HTTP.
+
 The PowerShell script runs in the security context of the LOCALSYSTEM account, which exists by default on all Windows hosts.  This is a good account to use because it does not require creation of local or domain user accounts on each Windows host, and the LOCALSYSTEM account has zero rights to any network resources, so it cannot be used for lateral system compromise or exploitation.
+
 Create the scheduled task with a command similiar to:
 ```
 schtasks.exe /create /S %computername% /RU SYSTEM /SC minute /MO 5 /TN nagios_passive_check /TR "powershell.exe c:\progra~1\nagios\libexec\nagios_passive_check.ps1"
 ```
 
 # Create config file  on monitored host
-You must edit the c:\progra~1\nagios\libexec\nagios_passive_check.cfg config file on the monitored host.  This config file will contain your site-specific details for the hostname/IP of the nagios server, the host_name of the monitored host as defined in the hosts.cfg file on the nagios server, and the htpasswd credential that will be used to authenticate against the nagios CGI interface.  For example:
+You must edit the c:\progra~1\nagios\libexec\nagios_passive_check.cfg config file on the monitored host.  This config file will contain your site-specific details for the hostname/IP of the nagios server, the host_name of the monitored host as defined in the hosts.cfg file on the nagios server, and the username/password htpasswd credential that will be used to authenticate against the nagios CGI interface.  For example:
 ```
 nagios_server=nagios.example.com
-host_name=server01
+passive_host=server01.example.com
+http_user=server01
 htpasswd=SecretPass1
 ```
 

@@ -17,6 +17,7 @@
 # 2022-04-12	njeffrey	Add Get-Scheduled-Task function
 # 2022-05-25	njeffrey	Break out functions into external script files to make maintenance easier
 # 2022-05-25	njeffrey	Move authentication details into external *.cfg file
+# 2022-07-28	njeffrey	Add Get-IIS-Application-Pool-Status 
 
 
 # NOTES

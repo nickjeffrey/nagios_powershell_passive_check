@@ -105,6 +105,11 @@ define contact {                                                ;create a contac
    use                            no-notify-contact             ;use template that has notification periods set to none
    contact_name                   myhost03                      ;this is a dummy contact only used to give the htpasswd credentials rights to the host_name
  }
+ define contact {                                               ;create a contact corresponding to htpasswd username
+   use                            no-notify-contact             ;use template that has notification periods set to none
+   contact_name                   webserv01                     ;this is a dummy contact only used to give the htpasswd credentials rights to the host_name
+ }
+
 ```
 
 
@@ -252,6 +257,25 @@ define service {
    contact_groups         admins                ; Who receives notifications for this service
    contacts               myhost01              ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
 }
+
+# Define service for passive check for IIS Application Pools
+define service {
+   use                    passive-8x5-service
+   host_name              webserv01.example.com 
+   service_description    IIS Application Pool DefaultAppPool   ; Name of service passive check will reference when sending passive check results to nagios server
+   contact_groups         admins                ; Who receives notifications for this service
+   contacts               webserv01             ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
+}
+
+# Define service for passive check for IIS Application Pools
+define service {
+   use                    passive-8x5-service
+   host_name              webserv01.example.com 
+   service_description    IIS Application Pool MyAppPoolName  ; Name of service passive check will reference when sending passive check results to nagios server
+   contact_groups         admins                ; Who receives notifications for this service
+   contacts               webserv01             ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
+}
+
 ###############################################
 # END OF PASSIVE CHECKS
 ###############################################

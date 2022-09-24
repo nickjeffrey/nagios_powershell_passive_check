@@ -18,6 +18,7 @@
 # 2022-05-25	njeffrey	Break out functions into external script files to make maintenance easier
 # 2022-05-25	njeffrey	Move authentication details into external *.cfg file
 # 2022-07-28	njeffrey	Add Get-IIS-Application-Pool-Status 
+# 2022-09-23	njeffrey	Add Get-MPIO-Path-State (for iSCSI / Fibre Channel path status)
 
 
 # NOTES
@@ -280,3 +281,6 @@ Ping-Nagios-Server
  $external_function="Get-Scheduled-Task-001"                ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
  $external_function="Get-IIS-Application-Pool-Status"       ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename --ApplicationPool DefaultAppPool}
  $external_function="Get-IIS-Application-Pool-Status"       ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename --ApplicationPool MyCustomPoolName}
+ $external_function="Get-MPIO-Path-State"                   ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ 
+ 

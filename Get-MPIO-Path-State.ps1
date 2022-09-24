@@ -63,11 +63,16 @@ function Get-MPIO-Path-State {
       if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
       return                                                            #break out of function
    }
+   # Confirm this script is being run with admin privileges
+   $mpclaim_result = . $mpclaim -s -d 
+   if ($mpclaim_result -Match 'Access is denied')   {
+      $plugin_state  = $UNKNOWN  
+      $plugin_output = "$service UNKNOWN - Access denied due to insufficient privilege to $mpclaim command.  Please confirm this script is being run with admin privileges."
+      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+      return                                                            #break out of function
+   }
    try {
-      # xxxxThe expected output of this command is empty if there is no user logged in at the console.
-      # xxxxIf there is a user logged in at the console (but not via RDP), the output will look similar to:
-      # xxxxSOMEDOMAIN\someusername
-      #
       $mpclaim_result = . $mpclaim -s -d 
       $mpio_disks = $mpclaim_result | Select-String -Pattern "MPIO Disk[0-9]"
       $mpio_disks = $mpio_disks -Replace '^MPIO Disk'   #get rid of leading text
@@ -103,7 +108,11 @@ function Get-MPIO-Path-State {
    #
    # submit nagios passive check results
    #
-   if ($active_optimized %2 -eq 0) {   #modulus of 2 should return zero
+   if ($active_optimized -eq 0 -and $active_unoptimized -eq 0 -and $standby -eq 0 -and $unavailable -eq 0) {
+      $plugin_state  = $UNKNOWN  
+      $plugin_output = "$service UNKNOWN - Could not detect any MPIO paths.  Please confirm this script is being run with admin privileges.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
+   }
+   if ($active_optimized -gt 0 -and $active_optimized %2 -ne 0) {   #modulus of 2 should return zero if number of paths is an even number
       $plugin_state  = $WARN 
       $plugin_output = "$service WARN - Active/Optimized paths should be an even number.  Odd numbers indicate a non-redundant configuration.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
@@ -119,16 +128,20 @@ function Get-MPIO-Path-State {
       $plugin_state  = $WARN  
       $plugin_output = "$service WARN - Detected $unavailable paths in unavailable state.  Please investigate.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
-   if ($active_optimized -eq $active_unoptimized -eq 0 -and $standby -eq 0 -and $unavailable -eq 0) {
+   if ($active_optimized -gt 0 -and $active_optimized -lt 4) {
+      $plugin_state  = $WARN  
+      $plugin_output = "$service WARN - there should be at least 4 paths available for sufficient redundancy.  Please add more paths.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
+   }
+   if ($active_optimized -gt 0 -and $active_optimized -eq $active_unoptimized -and $standby -eq 0 -and $unavailable -eq 0) {
       $plugin_state  = $OK  
       $plugin_output = "$service OK - Equal numbers of Active/Optimized and Active/Unoptimized paths indicate an active/passive storage system.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
-   if ($active_optimized -gt 0 -and $active_unoptimized -eq 0 -and $standby -eq 0 -and $unavailable -eq 0) {
+   if ($active_optimized -ge 4 -and $active_unoptimized -ge 0 -and $standby -eq 0 -and $unavailable -eq 0) {
       $plugin_state  = $OK  
       $plugin_output = "$service OK - Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
    return                                                            #break out of function
 }
 #

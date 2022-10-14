@@ -282,5 +282,16 @@ define service {
 ```
 
 
+# Troubleshooting
+Run the Powershell script manually with: ```powershell.exe c:\progra~1\nagios\libexec\nagios_passive_check.ps1```
+
+If you see this error message:
+```
+C:\Program Files\nagios\libexec\nagios_passive_check.ps1 is not digitally signed. You cannot run this script on the current system. 
+For more information about running scripts and setting execution policy, see about_Execution_Policies at https://go.microsoft.com/fwlink/?LinkID=135170
+```
+It means that the Windows operating system has detected that the PowerShell script was downloaded from the internet.
+You can work around this error by changing the default PowerShell execution policy, or by copying the files to a temporary location (ie c:\temp\), then create the files in the target directory using notepad copy/paste, which will make the files "locally created" instead of sourced from the internet, which will make PowerShell trust the files.
+
 # Sample Output
 <img src=images/passive_check.png>

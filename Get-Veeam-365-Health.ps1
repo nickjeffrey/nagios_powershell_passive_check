@@ -4,10 +4,13 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
+# 2022-05-25	njeffrey	Script created for Veeam for MS365 version 4 (uses VeeamPSSnapin snap-in PowerShell module)
+# 2022-10-14	njeffrey	Add error checks for Veeam O365 Community Edition, LicenseExpirationDate and SupportExpirationDate will be blank because these are unsupported products
+
 
 function Get-Veeam-365-Health {
    #
+   $verbose = "yes"
    if ($verbose -eq "yes") { Write-Host "" ; Write-Host "Running Get-Veeam-365-Health function" }
    #
    # declare variables
@@ -87,7 +90,7 @@ function Get-Veeam-365-Health {
    # Now we will connect to the Veeam server
    #
    try {
-      Connect-VBOServer 								#connect to the Veeam server running on local machine
+      Connect-VBOServer                                    #connect to the Veeam server running on local machine
    }
    catch {
       Write-Host "ERROR: Could not connect to Veeam 365 server with Connect-VBOServer PowerShell snap in"
@@ -104,9 +107,17 @@ function Get-Veeam-365-Health {
    $veeam = @{}										#create an empty hash
    $x = Get-VBOLicense
    $veeam.Add("LicenseStatus",$x.Status)						#add license status to hash (HINT: do not surround $x.Status with quotes)
+   $veeam.Add("LicenseType",$x.Type)							#add license type to hash
    $veeam.Add("LicenseExpirationDate",$x.ExpirationDate)				#add license expiration date to hash
    $veeam.Add("SupportExpirationDate",$x.SupportExpirationDate)				#add support expiration date to hash
    #
+   # If the license type is "Community" and the license status is "Valid", the ExpirationDate and SupportExpirationDate will be blank, because those products have no vendor support.
+   # Put in dummy values of 9999 days from now to avoid undef errors
+   if ( ($veeam.LicenseStatus -eq "Valid") -and ($veeam.LicenseType -eq "Community") -and ($veeam.LicenseExpirationDate -eq $Null) -and ($veeam.SupportExpirationDate -eq $Null) ) { 
+      Write-Host "Adding dummy values to LicenseExpirationDate and SupportExpirationDate for Community edition"
+      $veeam.LicenseExpirationDate = (Get-Date).AddDays(9999)
+      $veeam.SupportExpirationDate = (Get-Date).AddDays(9999)
+   }
    # do some math to figure out days until license expiration
    #
    $x = (New-TimeSpan -Start (Get-Date) -End (Get-Date $veeam.LicenseExpirationDate)).TotalDays  #do some math to figure out number of days between now and license expiration date
@@ -150,9 +161,9 @@ function Get-Veeam-365-Health {
       if ( ($repo_used_pct -ge $threshold_warn) -and ($repo_used_pct -lt $threshold_crit) ) { $veeam['RepoUsageWarn'] = "yes" ; $veeam['RepoUsageCrit'] = "no"  } #set yes|no flag that applies globally to all repos for alerting purposes
       if ( ($repo_used_pct -lt $threshold_warn) -and ($repo_used_pct -lt $threshold_crit) ) { $veeam['RepoUsageWarn'] = "no"  ; $veeam['RepoUsageCrit'] = "no"  } #set yes|no flag that applies globally to all repos for alerting purposes
       $x = "RepoName:" + $repo_name + " RepoUsage:" + $repo_used_gb + "/" +  $repo_total_gb + "GB(" + $repo_used_pct + "%)"
-      $repo_usage = "$repo_usage, $x"						#concatenate all the repository details into a single string variable
+      $repo_usage = "$repo_usage, $x"                                                   #concatenate all the repository details into a single string variable
    }
-   $veeam.Add("RepoUsage",$repo_usage)							#add all repository usage details to a single hash element
+   $veeam.Add("RepoUsage",$repo_usage)                                                  #add all repository usage details to a single hash element
    if ($verbose -eq "yes") { Write-Host $repo_usage }
    #
    # Check the success/warning/failure status of the backup jobs
@@ -194,7 +205,7 @@ function Get-Veeam-365-Health {
    #
    # Figure out if there are any problems to be reported
    # get all the common info into a single variable
-   $plugin_output = "LicenseStatus:" + $veeam.LicenseStatus + " LicenseExpiration:" + $veeam.DaysToLicenseExpirationDate + "days SupportExpiration:" + $veeam.DaysToSupportExpirationDate + "days Successful_backups:" + $veeam.BackupSuccessCount + " Failed_backups:" + $veeam.BackupFailedCount + " Unknown_backups:" + $veeam.BackupUnknownCount + $veeam.RepoUsage
+   $plugin_output = "LicenseStatus:" + $veeam.LicenseStatus + " LicenseType:" + $veeam.LicenseType + " LicenseExpiration:" + $veeam.DaysToLicenseExpirationDate + "days SupportExpiration:" + $veeam.DaysToSupportExpirationDate + "days Successful_backups:" + $veeam.BackupSuccessCount + " Failed_backups:" + $veeam.BackupFailedCount + " Unknown_backups:" + $veeam.BackupUnknownCount + $veeam.RepoUsage
    #
    # This is the "everything is all good" message format
    #

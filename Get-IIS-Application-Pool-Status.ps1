@@ -16,7 +16,8 @@
 
 # TROUBLESHOOTING
 # ---------------
-# This check assumes that the IIS component "IIS Scripts and Tools" is installed, and will crash if that component is missing.
+# This check assumes that the IIS component "IIS Scripts and Tools" is installed, 
+# and will crash with an error saying "root\WebAdministration namespace is missing" if that component is missing.
 
 # Copyright:
 #   This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published

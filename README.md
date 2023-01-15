@@ -289,7 +289,7 @@ define service {
 define service {
    use                    passive-8x5-service
    host_name              webserv01.example.com 
-   service_description    Certificate Expiry ; Name of service passive check will reference when sending passive check results to nagios server
+   service_description    Certificate Expiry Date; Name of service passive check will reference when sending passive check results to nagios server
    contact_groups         admins                ; Who receives notifications for this service
    contacts               webserv01             ; This associates which contacts (and htpasswd users) are allowed to update this host and service.
 }

@@ -1,3 +1,5 @@
+# OUTSTANDING PROBLEM: script works when run interactively, but not from Scheduled Task (either as LOCALSYSTEM or domain admin user)
+
 # powershell function to perform check on local machine
 # this script is called from the master nagios_passive_check.ps1 script
 # the results of this check are submitted to the nagios server as a passive check via HTTP
@@ -5,6 +7,18 @@
 # CHANGE LOG
 # ----------
 # 2023-01-14	njeffrey	Script created
+
+# INSTALLATION REQUIREMENTS
+# ------------------------
+# Most of the nagios passive checks run in the security context of the LOCALSYSTEM account, which has no access to network resources
+# However, this check performs queries against Active Directory to get a list of machines, and then performs PowerShell Remoting to multiple remote hosts
+# These functions cannot run as the LOCALSYSTEM account, so this check must be scheduled in the context of a domain security account with permissions to all the remote hosts
+# For example, we will assume there is a service account called MYDOMAIN\ServiceAccount1 (you will be prompted to enter the password as shown in the example below)
+# Schedule this script to run hourly.  Please note that output is written to a temporary file that is refreshed every 24 hours, so 23/24 times this script runs, the tempfile is used.
+# schtasks.exe /create /S %computername% /RU MYDOMAIN\ServiceAccount1 /RP /SC hourly /MO 1 /TN Get-Certificate-ExpiryDate /TR "powershell.exe c:\progra~1\nagios\libexec\Get-Certificate-ExpiryDate.ps1"
+# Please enter the run as password for MYDOMAIN\ServiceAccount1: *******
+
+
 
 
 # FUTURE ENHANCEMENTS
@@ -22,7 +36,12 @@
 # Get-ADComputer : The term 'Get-ADComputer' is not recognized as the name of a cmdlet, function, script file, or
 # operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
 
+# It is assumed the remote machines respond to ping.  If there is no ping reply, the host will be skipped.
 
+# It is assumed the local machine has sufficient Active Directory credentials for PowerShell Remoting to all defined hosts.
+# Remote hosts that are not accessible via PowerShell Remoting will be silently skipped.
+
+# It is assumed that this check is being run on a centralized utility box that has permission to query Active Directory
 
 # If you get this message, it means there is a ComputerName defined in Active Directory, but no corresponeding DNS entry.  
 # This might be an obsolete computer account in AD, so consider deleting it from AD Sites and Services.
@@ -52,13 +71,24 @@
 # $cert = New-SelfSignedCertificate -DnsName localsite.com -FriendlyName MySelfSignedCert3 -NotAfter (Get-Date).AddDays(1)      #expires 1 day from now
 # $cert = New-SelfSignedCertificate -DnsName localsite.com -FriendlyName MySelfSignedCert3 -NotAfter (Get-Date).AddMinutes(1)   #expires 1 minute from now
 
+# View existing certificates with:
+# Start, run, mmc.exe, Add/Remove Snap-ins, Certificates
+
+# sample script output:
+# Certificate Expiry Date CRITICAL - CRITICAL: MYSERV01 certificate MySelfSignedCert4 already expired 3 days ago. 
+#                                    WARN: MYSERV01 certificate MySelfSignedCert5 expiring in 5 days. 
+#                                    OK: MYSERV01 certificate MySelfSignedCertTest1 is ok, expiring in 361 days. 
+#                                    OK: MYSERV01 certificate Veeam Self-Signed Patch Certificate is ok, expiring in 3648 days. 
+#                                    OK: MYSERV01 certificate Veeam Self-Signed Certificate is ok, expiring in 3646 days. 
+#                                    OK: MYSERV01 certificate 1A9E07743721A684F7C7AF89AA4A7257BF72CA7F is ok, expiring in 362 days. 
+
 
 
 
 function Get-Certificate-ExpiryDate {
    #
    $verbose = "yes"
-   $verbose = "no"
+   #$verbose = "no"
    if ($verbose -eq "yes") { Write-Host "" ; Write-Host "Running Get-Certificate-ExpiryDate" }
    #
    # declare variables
@@ -74,7 +104,12 @@ function Get-Certificate-ExpiryDate {
    #
    #
    # This check only needs to be run on a daily basis, so check to see if a dummy file containing the output exists.
-   $dummyFile = "$env:TEMP\nagios.certificate.expirydate.check.txt"
+   $DestDir = "C:\temp"
+   If(!(test-path -PathType container $path)) {
+      New-Item -ItemType Directory -Path $path
+   }
+   #$dummyFile = "$env:TEMP\nagios.certificate.expirydate.check.txt"  #cannot use ENV variable because this script runs as 2 different users with different ENV
+   $dummyFile = "c:\temp\nagios.certificate.expirydate.check.txt"
    #
    # Delete the file if it is more than 60*24 minutes old
    if (Test-Path $dummyFile -PathType leaf) { 
@@ -106,16 +141,17 @@ function Get-Certificate-ExpiryDate {
    #
    # check to see if the ActiveDirectory Powershell module exists, which contains the Get-ADComputer command
    #
-   if (Get-Module -Name ActiveDirectory) {
-      if ($verbose -eq "yes") { Write-Host "Found required PowerShell module ActiveDirectory" }
-   } 
-   else {
-      $plugin_state = 3
-      $plugin_output = "$service UNKNOWN - cannot find ActiveDirectory PowerShell module.  Please install with: Get-WindowsFeature | where name -like RSAT-AD-Tools | Install-WindowsFeature "  
-      if ($verbose -eq "yes") { Write-Host $plugin_output }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return
-   }
+# xxx This section works when run interactively, but not from scheduled task
+# Try adjusting scheduled task to "run whether user is logged in or not"  or maybe "run interactively"
+#   if (Get-Module -Name ActiveDirectory) {
+#      if ($verbose -eq "yes") { Write-Host "Found required PowerShell module ActiveDirectory" }
+#   } else {
+#      $plugin_state = 3
+#      $plugin_output = "$service UNKNOWN - cannot find ActiveDirectory PowerShell module.  Please install with: Install-WindowsFeature RSAT-AD-Tools"  
+#      if ($verbose -eq "yes") { Write-Host $plugin_output }
+#      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+#      return
+#   }
    #
    # if we get this far, we know that the ActiveDirectory Powershell module is available, which contains the Get-ADComputer command
    #
@@ -199,7 +235,8 @@ function Get-Certificate-ExpiryDate {
          # find certificates that are already expired
          #
          if ($DaysUntilExpiry -lt 0 ) {
-            $Certificates_AlreadyExpired = "$Certificates_AlreadyExpired CRITICAL: $server certificate $FriendlyName already expired $DaysUntilExpiry days ago."
+            $DaysSinceExpiry = $DaysUntilExpiry * -1 #convert negative number to positive number
+            $Certificates_AlreadyExpired = "$Certificates_AlreadyExpired CRITICAL: $server certificate $FriendlyName already expired $DaysSinceExpiry days ago."
             $Certificates_AlreadyExpired = $Certificates_AlreadyExpired -replace "`t|`n|`r",""  #replace newlines with blanks
          }
       }
@@ -223,17 +260,17 @@ function Get-Certificate-ExpiryDate {
    #
    # Figure out what result will be sent to nagios
    #
-   if ( $Certificates_SoonToExpire -match "\S" ) {   # \S means any non-whitespace character
+   if ( $Certificates_NotExpired -match "\S" ) {   # \S means any non-whitespace character
       $plugin_state  = 0			     #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - $Certificates_NotExpired"
    }
    if ( $Certificates_SoonToExpire -match "\S" ) {
       $plugin_state  = 1			     #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARN - $Certificates_SoonToExpire"
+      $plugin_output = "$service WARN - $Certificates_SoonToExpire $Certificates_NotExpired"
    }
    if ( $Certificates_AlreadyExpired -match "\S" ) {
       $plugin_state  = 3			     #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service CRITICAL - $Certificates_AlreadyExpired $Certificates_SoonToExpire"  #note that we include CRITICAL messages first, followed by WARN messages
+      $plugin_output = "$service CRITICAL - $Certificates_AlreadyExpired $Certificates_SoonToExpire $Certificates_NotExpired"  #note that we include CRITICAL messages first, followed by WARN messages, followed by OK
    }
    #
    # send the output to nagios
@@ -247,7 +284,3 @@ function Get-Certificate-ExpiryDate {
 # call the above function
 #
 Get-Certificate-ExpiryDate
-
-
-
-

@@ -74,15 +74,33 @@
 # View existing certificates with:
 # Start, run, mmc.exe, Add/Remove Snap-ins, Certificates
 
-# sample script output:
+
+
+
+# NOTES
+# -----
+# Nagios limits the maximum size of plugin outputs to 8192 characters.  This check can generate very long output in large environments, which may exceed 8192 characters.
+#
+# In small environments, the output will be more verbose.  For example:
 # Certificate Expiry Date CRITICAL - CRITICAL: MYSERV01 certificate MySelfSignedCert4 already expired 3 days ago. 
-#                                    WARN: MYSERV01 certificate MySelfSignedCert5 expiring in 5 days. 
+#                                    WARN: MYSERV01 certificate MySelfSignedCert5 will be expiring in 5 days. 
 #                                    OK: MYSERV01 certificate MySelfSignedCertTest1 is ok, expiring in 361 days. 
 #                                    OK: MYSERV01 certificate Veeam Self-Signed Patch Certificate is ok, expiring in 3648 days. 
 #                                    OK: MYSERV01 certificate Veeam Self-Signed Certificate is ok, expiring in 3646 days. 
 #                                    OK: MYSERV01 certificate 1A9E07743721A684F7C7AF89AA4A7257BF72CA7F is ok, expiring in 362 days. 
-
-
+#
+# However, if the $plugin_output variable contains > 8192 characters, 
+# the output will be shortened to just include the hostname and certificate name, but not days until expiry.
+# For example:
+# Certificate Expiry Date CRITICAL - CRITICAL: MYSERV01 certificate MySelfSignedCert4 
+#                                    WARN: MYSERV01 certificate MySelfSignedCert5
+#                                    OK: MYSERV01 certificate MySelfSignedCertTest1
+#                                    OK: MYSERV01 certificate Veeam Self-Signed Patch Certificate
+#                                    OK: MYSERV01 certificate Veeam Self-Signed Certificate is ok
+#                                    OK: MYSERV01 certificate 1A9E07743721A684F7C7AF89AA4A7257BF72CA7F
+#
+# If, even after shortening the ouput as shown above, the $plugin_output is still > 8192 characters, 
+# the output will be truncated, with the following text appended to the message:  MESSAGE TRUNCATED DUE TO EXCESSIVE LENGTH 
 
 
 function Get-Certificate-ExpiryDate {
@@ -105,8 +123,8 @@ function Get-Certificate-ExpiryDate {
    #
    # This check only needs to be run on a daily basis, so check to see if a dummy file containing the output exists.
    $DestDir = "C:\temp"
-   If(!(test-path -PathType container $path)) {
-      New-Item -ItemType Directory -Path $path
+   If(!(test-path -PathType container $DestDir)) {
+      New-Item -ItemType Directory -Path $DestDir
    }
    #$dummyFile = "$env:TEMP\nagios.certificate.expirydate.check.txt"  #cannot use ENV variable because this script runs as 2 different users with different ENV
    $dummyFile = "c:\temp\nagios.certificate.expirydate.check.txt"
@@ -228,7 +246,7 @@ function Get-Certificate-ExpiryDate {
          # find certificates that will expire soon, but are not yet expired
          #
          if ( ($DaysUntilExpiry -lt $DaysUntilExpiryWarningThreshold) -And ($DaysUntilExpiry -ge 0) ) {
-            $Certificates_SoonToExpire = "$Certificates_SoonToExpire WARN: $server certificate $FriendlyName expiring in $DaysUntilExpiry days."
+            $Certificates_SoonToExpire = "$Certificates_SoonToExpire WARN: $server certificate $FriendlyName will expire in $DaysUntilExpiry days."
             $Certificates_SoonToExpire = $Certificates_SoonToExpire -replace "`t|`n|`r",""  #replace newlines with blanks
          }
          #
@@ -275,6 +293,25 @@ function Get-Certificate-ExpiryDate {
    #
    # send the output to nagios
    #
+   $plugin_output_maxsize = 8192
+   if ($plugin_output.Length -gt $plugin_output_maxsize) { 
+      if ($verbose -eq "yes") { Write-Host "---truncating output for OK messages due to excessive message size--- " }
+      $plugin_output = $plugin_output -replace "is ok, expiring in \d+ days",""  #shorten the OK messages
+   }
+   if ($plugin_output.Length -gt $plugin_output_maxsize) { 
+      if ($verbose -eq "yes") { Write-Host "---truncating output for WARN messages due to excessive message size --- " }
+      $plugin_output = $plugin_output -replace "will expire in \d+ days",""  #shorten the WARN messages
+   }
+   if ($plugin_output.Length -gt $plugin_output_maxsize) { 
+      if ($verbose -eq "yes") { Write-Host "---truncating output for CRITICAL messages due to excessive message size --- " }
+      $plugin_output = $plugin_output -replace "already expired \d+ days ago",""  #shorten the CRITICAL messages
+   }
+   if ($plugin_output.Length -gt $plugin_output_maxsize) { 
+      if ($verbose -eq "yes") { Write-Host "---truncating output for all messages due to excessive message size --- " }
+      $plugin_output = $plugin_output -replace "already expired \d+ days ago",""  #shorten the WARN messages
+      $plugin_output = $plugin_output.Substring(0,$plugin_output_maxsize-50)  #truncate message so it does not exceed nagios maximum message size of 8192 characters
+      $plugin_output = "$plugin_output MESSAGE TRUNCATED DUE TO EXCESSIVE LENGTH"
+   }
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
    $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
    if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios

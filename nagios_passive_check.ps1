@@ -20,6 +20,8 @@
 # 2022-07-28	njeffrey	Add Get-IIS-Application-Pool-Status 
 # 2022-09-23	njeffrey	Add Get-MPIO-Path-State (for iSCSI / Fibre Channel path status)
 # 2023-01-14   njeffrey Add Get-Certificate-ExpiryDate for local certificate stores
+# 2023-02-05   njeffrey Add Get-Local-CA-ExpiryDate for local Certificate Authority
+
 
 
 # NOTES
@@ -284,5 +286,6 @@ Ping-Nagios-Server
  $external_function="Get-IIS-Application-Pool-Status"       ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename --ApplicationPool MyCustomPoolName}
  $external_function="Get-MPIO-Path-State"                   ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
  $external_function="Get-Certificate-ExpiryDate"            ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
+ $external_function="Get-Local-CA-ExpiryDate"               ; $filename = (Join-Path -Path "$PSScriptRoot" -ChildPath "$external_function.ps1") ; if (Test-Path -PathType Leaf -Path "$filename") { Write-Host "   sourcing file $filename" ; . $filename }
  
  

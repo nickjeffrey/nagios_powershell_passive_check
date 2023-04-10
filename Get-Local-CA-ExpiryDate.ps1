@@ -6,6 +6,7 @@
 # CHANGE LOG
 # ----------
 # 2023-02-05	njeffrey	Script created
+# 2023-04-10	njeffrey	Change $plugin_output_maxsize from 8192 to 4096 to avoid cluttering web interface
 
 
 
@@ -178,7 +179,7 @@ function Get-Local-CA-ExpiryDate {
    #
    # send the output to nagios
    #
-   $plugin_output_maxsize = 8192
+   $plugin_output_maxsize = 4096
    if ($plugin_output.Length -gt $plugin_output_maxsize) { 
       if ($verbose -eq "yes") { Write-Host "---truncating output for OK messages due to excessive message size--- " }
       $plugin_output = $plugin_output -replace "is ok, expiring in \d+ days",""  #shorten the OK messages
@@ -194,7 +195,7 @@ function Get-Local-CA-ExpiryDate {
    if ($plugin_output.Length -gt $plugin_output_maxsize) { 
       if ($verbose -eq "yes") { Write-Host "---truncating output for all messages due to excessive message size --- " }
       $plugin_output = $plugin_output -replace "already expired \d+ days ago",""  #shorten the WARN messages
-      $plugin_output = $plugin_output.Substring(0,$plugin_output_maxsize-50)  #truncate message so it does not exceed nagios maximum message size of 8192 characters
+      $plugin_output = $plugin_output.Substring(0,$plugin_output_maxsize-50)  #truncate message so it does not exceed nagios maximum message size  
       $plugin_output = "$plugin_output MESSAGE TRUNCATED DUE TO EXCESSIVE LENGTH"
    }
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }

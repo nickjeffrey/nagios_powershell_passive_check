@@ -7,6 +7,7 @@
 # CHANGE LOG
 # ----------
 # 2023-01-14	njeffrey	Script created
+# 2023-04-10	njeffrey	Change $plugin_output_maxsize from 8192 to 4096 to avoid cluttering web interface
 
 # INSTALLATION REQUIREMENTS
 # ------------------------
@@ -79,7 +80,9 @@
 
 # NOTES
 # -----
-# Nagios limits the maximum size of plugin outputs to 8192 characters.  This check can generate very long output in large environments, which may exceed 8192 characters.
+# Nagios limits the maximum size of plugin outputs to 8192 characters.  
+# This check can generate very long output in large environments, which may exceed 8192 characters.
+# We will be cautious and limit output to half of the maximum, or 4096 characters, to avoid cluttering the web interface.
 #
 # In small environments, the output will be more verbose.  For example:
 # Certificate Expiry Date CRITICAL - CRITICAL: MYSERV01 certificate MySelfSignedCert4 already expired 3 days ago. 
@@ -89,7 +92,7 @@
 #                                    OK: MYSERV01 certificate Veeam Self-Signed Certificate is ok, expiring in 3646 days. 
 #                                    OK: MYSERV01 certificate 1A9E07743721A684F7C7AF89AA4A7257BF72CA7F is ok, expiring in 362 days. 
 #
-# However, if the $plugin_output variable contains > 8192 characters, 
+# However, if the $plugin_output variable contains > 4096 characters, 
 # the output will be shortened to just include the hostname and certificate name, but not days until expiry.
 # For example:
 # Certificate Expiry Date CRITICAL - CRITICAL: MYSERV01 certificate MySelfSignedCert4 
@@ -99,7 +102,7 @@
 #                                    OK: MYSERV01 certificate Veeam Self-Signed Certificate is ok
 #                                    OK: MYSERV01 certificate 1A9E07743721A684F7C7AF89AA4A7257BF72CA7F
 #
-# If, even after shortening the ouput as shown above, the $plugin_output is still > 8192 characters, 
+# If, even after shortening the ouput as shown above, the $plugin_output is still > 4096 characters, 
 # the output will be truncated, with the following text appended to the message:  MESSAGE TRUNCATED DUE TO EXCESSIVE LENGTH 
 
 
@@ -293,7 +296,7 @@ function Get-Certificate-ExpiryDate {
    #
    # send the output to nagios
    #
-   $plugin_output_maxsize = 8192
+   $plugin_output_maxsize = 4096
    if ($plugin_output.Length -gt $plugin_output_maxsize) { 
       if ($verbose -eq "yes") { Write-Host "---truncating output for OK messages due to excessive message size--- " }
       $plugin_output = $plugin_output -replace "is ok, expiring in \d+ days",""  #shorten the OK messages
@@ -309,7 +312,7 @@ function Get-Certificate-ExpiryDate {
    if ($plugin_output.Length -gt $plugin_output_maxsize) { 
       if ($verbose -eq "yes") { Write-Host "---truncating output for all messages due to excessive message size --- " }
       $plugin_output = $plugin_output -replace "already expired \d+ days ago",""  #shorten the WARN messages
-      $plugin_output = $plugin_output.Substring(0,$plugin_output_maxsize-50)  #truncate message so it does not exceed nagios maximum message size of 8192 characters
+      $plugin_output = $plugin_output.Substring(0,$plugin_output_maxsize-50)  #truncate message so it does not exceed nagios maximum message size 
       $plugin_output = "$plugin_output MESSAGE TRUNCATED DUE TO EXCESSIVE LENGTH"
    }
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }

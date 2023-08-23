@@ -113,7 +113,7 @@ define contact {                                                ;create a contac
 ```
 
 
-# services.cfg file 
+# Define passive service checks in services.cfg file 
 You will need to add entries similar to the following to the services.cfg file on the nagios server.  Please adjust as appropriate for your environment.
 ```
 ##############################################

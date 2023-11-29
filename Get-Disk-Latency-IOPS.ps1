@@ -5,6 +5,7 @@
 # CHANGE LOG
 # ----------
 # 2022-05-25	njeffrey	Script created
+# 2023-11-29	Bug fix, use = instead of -eq for assignment
 
 function Get-Disk-Latency-IOPS {
    #
@@ -48,11 +49,20 @@ function Get-Disk-Latency-IOPS {
    #
    # If we get this far, all the disk latency/IOPS detail has been collected.
    #
+   # Alert for both high latency and high disk queue length
+   #
+   if ($latencyWarn -eq "yes" -And $queueLengthWarn -eq "yes") {
+      $plugin_state = 1
+      $plugin_output = "$service WARN - high disk latency and high disk queue length.  $plugin_output"
+      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+      return                                                            #break out of function
+   }
+   #
    # Alert for high latency
    #
-
-   if ( $latencyWarn -eq "yes") {
-      $plugin_state -eq 1
+   if ($latencyWarn -eq "yes") {
+      $plugin_state = 1
       $plugin_output = "$service WARN - high disk latency.  $plugin_output"
       if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
       if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
@@ -61,8 +71,8 @@ function Get-Disk-Latency-IOPS {
    #
    # Alert for high disk queue length
    #
-   if ( $queueLengthWarn -eq "yes") {
-      $plugin_state -eq 1
+   if ($queueLengthWarn -eq "yes") {
+      $plugin_state = 1
       $plugin_output = "$service WARN - high disk queue length.  $plugin_output"
       if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
       if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
@@ -71,7 +81,7 @@ function Get-Disk-Latency-IOPS {
    #
    # We only get this far if everything is ok
    #
-   $plugin_state -eq 0
+   $plugin_state = 0
    $plugin_output = "$service OK $plugin_output"
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
       if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios

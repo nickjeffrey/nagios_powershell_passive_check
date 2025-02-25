@@ -1,5 +1,15 @@
 # nagios_powershell_passive_check
-nagios passive check for Windows hosts using PowerShell
+nagios passive checks for Windows hosts using PowerShell
+
+The intended use of these PowerShell scripts are for locked down Windows hosts that are not able to be monitored via SNMP or the Nagios NCPA agent.
+
+In other words, this is "agentless monitoring", because we have a bunch of PowerShell scripts that run locally on the Windows host from the Windows Task Scheduler, and push their results to the Nagios server web interface.
+
+The nagios server will be configured to accept "passive checks", similar to the example graphic shown at the bottom of this page.
+
+# Requirements
+
+Ability to create scheduled tasks on Windows host, ability to create files in C:\Program Files\nagios\libexec\* , network connectivity from Windows host to ports 80 and 443 on the nagios server.
 
 # Copy files to monitored host
 Copy the *.ps1 and *.cfg files to c:\Program Files\nagios\libexec\

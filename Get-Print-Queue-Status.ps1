@@ -8,7 +8,7 @@
 
 function Get-Print-Queue-Status {
    #
-   $verbose = "yes"
+   $verbose = "no"
    if ($verbose -eq "yes") { Write-Host "" ; Write-Host "Running Get-Print-Queue-Status function" }
    #
    # declare variables

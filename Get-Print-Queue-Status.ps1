@@ -4,7 +4,7 @@
 # CHANGE LOG
 # ----------
 # 2022-05-25	njeffrey	Script created
-# 2025-05-15	njeffrey	Add performance counters for days since last update
+# 2025-05-15	njeffrey	Add performance counters
 
 function Get-Print-Queue-Status {
    #

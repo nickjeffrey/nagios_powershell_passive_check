@@ -9,7 +9,9 @@ The nagios server will be configured to accept "passive checks", similar to the 
 
 # Requirements
 
-Ability to create scheduled tasks on Windows host, ability to create files in C:\Program Files\nagios\libexec\ , network connectivity from Windows host to ports 80 and 443 on the nagios server.
+- Ability to create scheduled tasks on Windows host
+- Ability to create files in C:\Program Files\nagios\libexec\
+- Network connectivity from Windows host to ports 80 and 443 on the nagios server.
 
 # Copy files to monitored host
 Copy the *.ps1 and *.cfg files to c:\Program Files\nagios\libexec\

@@ -5,6 +5,7 @@
 # CHANGE LOG
 # ----------
 # 2022-05-25	njeffrey	Script created
+# 2026-02-19   add NCPA compatibility
 
 
 function Get-Console-User {
@@ -24,6 +25,13 @@ function Get-Console-User {
    # declare variables
    $service = "ConsoleLogon"                    #name of check defined on nagios server
    #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3         
+   #
+   #
    try {
       # The expected output of this command is empty if there is no user logged in at th console.
       # If there is a user logged in at the console (but not via RDP), the output will look similar to:
@@ -33,7 +41,7 @@ function Get-Console-User {
    }
    catch {
       Write-Host "Access denied.  Please check your permissions."
-      $plugin_state = 3                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $UNKNOWN                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service UNKNOWN - Could not run query user command.  Please check permissions of user executing this script."
       if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
       if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
@@ -61,40 +69,50 @@ function Get-Console-User {
    # submit nagios passive check results
    #
    if ($RequiredUser -eq "any" -and $ConsoleUser -eq "none") {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - no user logged on at local console.  There should be a user logon at the console."
    }
    if ($RequiredUser -eq "any" -and $ConsoleUser -notmatch "none" -and $ConsoleUser -match "\w") {
-      $plugin_state = 0                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - The $ConsoleUser user is logged in at the console."
    }
    if ($RequiredUser -eq "none" -and $ConsoleUser -eq "none") {
-      $plugin_state = 0                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - no user logged on at local console.  There should not be a user logged on at the console."
    }
    if ($RequiredUser -eq "none" -and $ConsoleUser -notmatch "none" -and $ConsoleUser -match "\w") {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - The $ConsoleUser user is logged in at the console.  There should not be anyone logged in at the console.  Please logout the user $ConsoleUser."
    }
    if ($RequiredUser -ne "none" -and $RequiredUser -ne "any" -and $ConsoleUser -ne "none" -and $RequiredUser -ne $ConsoleUser) {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - The $RequiredUser user should be logged in at the console, but the $ConsoleUser user is logged in instead."
    }
    if ($RequiredUser -ne "none" -and $RequiredUser -ne "any" -and $ConsoleUser -eq "none" -and $RequiredUser -ne $ConsoleUser) {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - The $RequiredUser user should be logged in at the console, but there is no user logged into the console.  Please logon to the console as $RequiredUser"
    }
    if ($RequiredUser -ne "none" -and $RequiredUser -ne "any" -and $RequiredUser -eq $ConsoleUser) {
-      $plugin_state = 0                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - The $RequiredUser user is logged in at the console."
    }
+   #
+   # print output
+   #
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
    return                                                            #break out of function
 }
 #
 # call the above function
 #
 Get-Console-User
+
 
 

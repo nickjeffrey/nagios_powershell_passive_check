@@ -8,6 +8,8 @@
 # ----------
 # 2023-01-14	njeffrey	Script created
 # 2023-04-10	njeffrey	Change $plugin_output_maxsize from 8192 to 4096 to avoid cluttering web interface
+# 2026-02-29   add NCPA compatibility
+
 
 # INSTALLATION REQUIREMENTS
 # ------------------------
@@ -315,12 +317,22 @@ function Get-Certificate-ExpiryDate {
       $plugin_output = $plugin_output.Substring(0,$plugin_output_maxsize-50)  #truncate message so it does not exceed nagios maximum message size 
       $plugin_output = "$plugin_output MESSAGE TRUNCATED DUE TO EXCESSIVE LENGTH"
    }
+   #
+   # print output
+   #
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
    $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
    return   
 } 		#end of function
 #
 # call the above function
 #
 Get-Certificate-ExpiryDate
+

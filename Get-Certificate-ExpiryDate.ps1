@@ -124,6 +124,12 @@ function Get-Certificate-ExpiryDate {
    $Certificates_AlreadyExpired     = ""   #start with blank list to be used in output
    $hash = @{}                             #create an empty hash to hold all the certificate details
    #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3                         
+   #
    #
    #
    # This check only needs to be run on a daily basis, so check to see if a dummy file containing the output exists.
@@ -148,14 +154,21 @@ function Get-Certificate-ExpiryDate {
    if ((Test-Path $dummyFile -PathType leaf)) { 
       if ($verbose -eq "yes") { Write-Host "   using cached result from earlier check" }
       # figure out if the last check result was OK | WARN | CRITICAL
-      $plugin_state  = 3 								#start with a value of UNKNOWN just in case the contents of $dummyFile are corrupt
+      $exit_code  = $UNKNOWN 								#start with a value of UNKNOWN just in case the contents of $dummyFile are corrupt
       $plugin_output = Get-Content $dummyFile  						#read the contents of the text file into a variable
-      if     ( $plugin_output -match "$service OK"       ) { $plugin_state = 0 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service WARN"     ) { $plugin_state = 1 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service CRITICAL" ) { $plugin_state = 2 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service UNKNOWN"  ) { $plugin_state = 3 }	#0=ok 1=warn 2=critical 3=unknown
+      if     ( $plugin_output -match "$service OK"       ) { $exit_code = $OK       }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service WARN"     ) { $exit_code = $WARN     }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service CRITICAL" ) { $exit_code = $CRITICAL }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service UNKNOWN"  ) { $exit_code = $UNKNOWN  }	#0=ok 1=warn 2=critical 3=unknown
+      #
       if ($verbose -eq "yes") { Write-Host $plugin_output }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
       return										#break out of function
    }				
    #
@@ -169,7 +182,7 @@ function Get-Certificate-ExpiryDate {
 #   if (Get-Module -Name ActiveDirectory) {
 #      if ($verbose -eq "yes") { Write-Host "Found required PowerShell module ActiveDirectory" }
 #   } else {
-#      $plugin_state = 3
+#      $exit_code = $UNKNOWN
 #      $plugin_output = "$service UNKNOWN - cannot find ActiveDirectory PowerShell module.  Please install with: Install-WindowsFeature RSAT-AD-Tools"  
 #      if ($verbose -eq "yes") { Write-Host $plugin_output }
 #      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
@@ -284,15 +297,15 @@ function Get-Certificate-ExpiryDate {
    # Figure out what result will be sent to nagios
    #
    if ( $Certificates_NotExpired -match "\S" ) {   # \S means any non-whitespace character
-      $plugin_state  = 0			     #0=ok 1=warn 2=critical 3=unknown
+      $exit_code  = $OK			     #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - $Certificates_NotExpired"
    }
    if ( $Certificates_SoonToExpire -match "\S" ) {
-      $plugin_state  = 1			     #0=ok 1=warn 2=critical 3=unknown
+      $exit_code  = $WARN			     #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service WARN - $Certificates_SoonToExpire $Certificates_NotExpired"
    }
    if ( $Certificates_AlreadyExpired -match "\S" ) {
-      $plugin_state  = 3			     #0=ok 1=warn 2=critical 3=unknown
+      $exit_code  = $CRITICAL			     #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - $Certificates_AlreadyExpired $Certificates_SoonToExpire $Certificates_NotExpired"  #note that we include CRITICAL messages first, followed by WARN messages, followed by OK
    }
    #
@@ -335,4 +348,5 @@ function Get-Certificate-ExpiryDate {
 # call the above function
 #
 Get-Certificate-ExpiryDate
+
 

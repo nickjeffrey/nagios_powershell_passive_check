@@ -27,6 +27,9 @@ function Get-Disk-SMART-Health {
    #
    #
    try {
+      # NOTE: this WMI namespace is used for IDE/SATA/SCSI drives, but not NVMe drives!
+      # So for modern hardware, you may get no output, which this script will interpret as "no drives supporting SMART"
+      # This section should be updated to also search other WMI namespaces like MSFT_StorageReliabilityCounter
       Get-WmiObject -namespace root\wmi -class MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue | Foreach $_ {
          $drive_count++						#increment counter 
          if ($verbose -eq "yes") { Write-Host "InstanceName:" $_.InstanceName "PredictFailure:" $_.PredictFailure }
@@ -75,4 +78,5 @@ function Get-Disk-SMART-Health {
 # call the above function
 #
 Get-Disk-SMART-Health
+
 

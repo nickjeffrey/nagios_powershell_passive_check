@@ -5,6 +5,8 @@
 # CHANGE LOG
 # ----------
 # 2022-05-25	njeffrey	Script created
+# 2026-02-19   add NCPA compatibility
+
 
 function Get-Processor-Utilization {
    #
@@ -46,11 +48,21 @@ function Get-Processor-Utilization {
       $plugin_state = 2 			 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - processor utilization is ${processor_load_pct}%"
    }
+   #
+   # print output
+   #
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
    return                                                            #break out of function
 }
 #
 # call the above function
 #
+
 Get-Processor-Utilization

@@ -1,5 +1,5 @@
 # powershell function to perform check on local machine
-# this script can be called by NCPA or executed as a passive check
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
 # intent: find Windows hosts not updated in > 90 days
 
 # CHANGE LOG
@@ -123,4 +123,5 @@ function Get-LastWindowsUpdate {
 # call the above function
 #
 Get-LastWindowsUpdate
+
 

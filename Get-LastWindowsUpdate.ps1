@@ -4,17 +4,24 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
-# 2025-09-18	njeffrey	Add error check to catch updates will missing InstalledOn date
-
+# 2022-05-25	njeffrey   Script created
+# 2025-09-18	njeffrey   Add error check to catch updates will missing InstalledOn date
+# 2026-02-19   njeffrey   Add NCPA compatibility
 
 
 function Get-LastWindowsUpdate {
    $verbose = "no"             #yes|no flag to increase verbosity for debugging
    if ($verbose -eq "yes") { Write-Host "`nRunning Get-LastWindowsUpdate function" }
 
+   # declare variables
    $service = "Windows Update"
    $most_recent_hotfix = 99999  # sentinel for "none found"
+   #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3        
 
    # --- helper: safe date parser (never throws), used if Windows update did not include InstalledOn date----
    function Convert-ToDateSafe {
@@ -62,7 +69,7 @@ function Get-LastWindowsUpdate {
    }
    catch {
       Write-Host "Access denied.  Please check your WMI permissions."
-      $plugin_state = 3
+      $exit_code = $UNKNOWN
       $common_output_data = "$service UNKNOWN - Could not determine state of Windows patching. Please check WMI permissions of user executing this script."
       #
       # print output and exit script
@@ -82,15 +89,15 @@ function Get-LastWindowsUpdate {
    # Based on that number of deays, figure out the appropriate output 
    #
    if ($most_recent_hotfix -le 90) {
-      $plugin_state = 0  # 0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK  # 0=ok 1=warn 2=critical 3=unknown
       $common_output_data = "$service OK - most recent Windows patches were applied $most_recent_hotfix days ago."
    }
    if ($most_recent_hotfix -gt 90) {
-      $plugin_state = 1  # 0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $WARN  # 0=ok 1=warn 2=critical 3=unknown
       $common_output_data = "$service WARN - most recent Windows patches were applied $most_recent_hotfix days ago. Please confirm this host is getting updated on a regular basis."
    }
    if ($most_recent_hotfix -eq 99999) {
-      $plugin_state = 1   # 0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $WARN   # 0=ok 1=warn 2=critical 3=unknown
       $common_output_data = "$service WARN - could not find any Windows Updates or patches applied to this system. Please confirm this host is getting updated."
    }
    #
@@ -112,6 +119,8 @@ function Get-LastWindowsUpdate {
    }
    return                                               #break out of function
 } 							#end of function
-
-# call the function
+#
+# call the above function
+#
 Get-LastWindowsUpdate
+

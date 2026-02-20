@@ -4,7 +4,9 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
+# 2022-05-25	njeffrey   Script created
+# 2026-02-19   njeffrey   Add NCPA compatibility
+
 
 function Get-Windows-Firewall-Status {
    #
@@ -14,6 +16,13 @@ function Get-Windows-Firewall-Status {
    $service             = "firewall" 				#name of check defined on nagios server
    $zone_disabled_count = 0 					#initialize counter variable
    $plugin_output       = ""					#initialize variable
+   #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3 
+   #
    #
    try { 
       # Query the server for the login events. 
@@ -27,8 +36,20 @@ function Get-Windows-Firewall-Status {
       # Public     True
    }
    catch { 
-      Write-Host "ERROR: insufficient permissions to run Get-NetFirewallProfile powershell module.  Exiting script."
-      exit 
+      $exit_code = $UNKNOWN
+      $plugin_output = "$service UNKNOWN - insufficient permissions to run Get-NetFirewallProfile powershell module."
+      #
+      # print output
+      #
+      if ($verbose -eq "yes") { Write-Host "   Submitting nagios check results: $plugin_output" }
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
+      return   
    }
    #
    # if we get this far, the $firewall variable contains all the details about the different firewall zones and their enabled/disabled statusMicrosoft Defender antivirus
@@ -39,21 +60,28 @@ function Get-Windows-Firewall-Status {
    }
    # 
    if ( $zone_disabled_count -eq 0 ) {
-      $plugin_state = 0 								 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK 								 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
    }
    if ( $zone_disabled_count -gt 0 ) {
-      $plugin_state = 1 								 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $WARN 								 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service WARN - $zone_disabled_count firewall zones are disabled.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
    }
+   #
+   # print output
+   #
+    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
+   return   #break out of function
 } 											#end of function
 #
 # call the above function
 #
 Get-Windows-Firewall-Status
+

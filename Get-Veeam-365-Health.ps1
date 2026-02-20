@@ -1,6 +1,4 @@
 # powershell function to perform check on local machine
-# this script is called from the master nagios_passive_check.ps1 script
-# the results of this check are submitted to the nagios server as a passive check via HTTP
 
 # CHANGE LOG
 # ----------
@@ -345,3 +343,4 @@ function Get-Veeam-365-Health {
 # call the above function
 #
 Get-Veeam-365-Health
+

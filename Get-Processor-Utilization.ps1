@@ -1,11 +1,10 @@
 # powershell function to perform check on local machine
-# this script is called from the master nagios_passive_check.ps1 script
-# the results of this check are submitted to the nagios server as a passive check via HTTP
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
-# 2026-02-19   add NCPA compatibility
+# 2022-05-25	njeffrey   Script created
+# 2026-02-19   njeffrey   add NCPA compatibility
 
 
 function Get-Processor-Utilization {
@@ -71,4 +70,5 @@ function Get-Processor-Utilization {
 # call the above function
 #
 Get-Processor-Utilization
+
 

@@ -1,3 +1,5 @@
+# nagios check runs from NCPA
+
 # CHANGE LOG
 # ----------
 # 2025-08-27	njeffrey	Script created

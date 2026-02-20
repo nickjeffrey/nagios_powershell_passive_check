@@ -1,6 +1,5 @@
 # powershell function to perform check on local machine
-# this script is called from the master nagios_passive_check.ps1 script
-# the results of this check are submitted to the nagios server as a passive check via HTTP
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
 
 # CHANGE LOG
 # ----------
@@ -84,4 +83,5 @@ function Get-Windows-Firewall-Status {
 # call the above function
 #
 Get-Windows-Firewall-Status
+
 

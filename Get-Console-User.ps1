@@ -3,8 +3,8 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
-# 2026-02-19   add NCPA compatibility
+# 2022-05-25	njeffrey	   Script created
+# 2026-02-19   njeffrey   add NCPA compatibility
 
 
 function Get-Console-User {
@@ -112,6 +112,7 @@ function Get-Console-User {
 # call the above function
 #
 Get-Console-User
+
 
 
 

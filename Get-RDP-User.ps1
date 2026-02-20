@@ -4,7 +4,9 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
+# 2022-05-25	njeffrey   Script created
+# 2026-02-19   njeffrey   Add NCPA compatibility
+
 
 function Get-RDP-User {
    #
@@ -38,15 +40,30 @@ function Get-RDP-User {
    # declare variables
    $service = "RDPLogon"                    #name of check defined on nagios server
    #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3     
+   #
    try {
       $RDPUser = qwinsta.exe
    }
    catch {
       Write-Host "Access denied.  Please check your permissions."
-      $plugin_state = 3                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $UNKNOWN                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service UNKNOWN - Could not run query user command.  Please check permissions of user executing this script."
+      #
+      # print output
+      #
       if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
       return                                                            #break out of function
    }
    #
@@ -97,38 +114,48 @@ function Get-RDP-User {
    # submit nagios passive check results
    #
    if ($RequiredUser -eq "any" -and $RDPUser -eq "none") {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - no user logged on via RDP.  There should be at least one user logon via RDP."
    }
    if ($RequiredUser -eq "any" -and $RDPUser -notmatch "none" -and $RDPUser -match "\w") {
-      $plugin_state = 0                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - The following RDP sessions exist: $RDPUser "
    }
    if ($RequiredUser -eq "none" -and $RDPUser -eq "none") {
-      $plugin_state = 0                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - no user logged on via RDP.  There should not be a user logged via RDP."
    }
    if ($RequiredUser -eq "none" -and $RDPUser -notmatch "none" -and $RDPUser -match "\w") {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - There should not be anyone logged in via RDP.  Please logout the following RDP sessions: $RDPUser."
    }
    if ($RequiredUser -ne "none" -and $RequiredUser -ne "any" -and $RDPUser -ne "none" -and $RDPUser -notmatch $RequiredUser) {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - The $RequiredUser user should be logged in via RDP.  Please login via RDP as $RequiredUser."
    }
    if ($RequiredUser -ne "none" -and $RequiredUser -ne "any" -and $RDPUser -eq "none" -and $RequiredUser -ne $RDPUser) {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - The $RequiredUser user should be logged in via RDP, but there is no user logged in via RDP.  Please logon via RDP as $RequiredUser"
    }
    if ($RequiredUser -ne "none" -and $RequiredUser -ne "any" -and $RDPUser -match $RequiredUser) {
-      $plugin_state = 0                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - The $RequiredUser user is logged in via RDP."
    }
+   #
+   # print output
+   #
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
    return                                                            #break out of function
 }
 #
 # call the above function
 #
 Get-RDP-User
+

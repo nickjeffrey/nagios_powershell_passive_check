@@ -1,10 +1,9 @@
 # powershell function to perform check on local machine
-# this script is called from the master nagios_passive_check.ps1 script
-# the results of this check are submitted to the nagios server as a passive check via HTTP
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
+# 2022-05-25	njeffrey   Script created
+# 2026-02-19   njeffrey   Add NCPA compatibility
 
 function Get-Paging-Utilization {
    #
@@ -15,12 +14,19 @@ function Get-Paging-Utilization {
    $threshold_warn = 50				#warn     if paging space utilization is more than 50%
    $threshold_crit = 75				#critical if paging space utilization is more than 50%
    #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3         
+   #
+   #
    try {
       $PageFileResults = Get-CimInstance -Class Win32_PageFileUsage -ComputerName $Computer -ErrorAction Stop
    }
    catch {
       Write-Host "Access denied.  Please check your WMI permissions."
-      $plugin_state = 3 			 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $UNKNOWN 			 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service UNKNOWN - Could not determine paging space usage.  Please check WMI permissions of user executing this script."
       if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
       if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
@@ -38,19 +44,28 @@ function Get-Paging-Utilization {
    # submit nagios passive check results
    #
    if ($paging_used_pct -le $threshold_warn) {
-      $plugin_state = 0 			 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK 			 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - paging space utilization is ${paging_used_mb}MB/${paging_total_mb}MB ${paging_used_pct}%"
    }
    if ($paging_used_pct -gt $threshold_warn) {
-      $plugin_state = 1 			 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $WARN 			 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service WARN - paging space utilization is ${paging_used_mb}MB/${paging_total_mb}MB ${paging_used_pct}%.  Consider adding more RAM."
    }
    if ($paging_used_pct -gt $threshold_crit) {
-      $plugin_state = 2 			 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL 			 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - paging space utilization is ${paging_used_mb}MB/${paging_total_mb}MB ${paging_used_pct}%.  System will crash if paging space usage reaches 100%"
    }
+   #
+   # print output
+   #
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
    return                                                            #break out of function
 }
 #

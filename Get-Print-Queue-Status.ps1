@@ -3,8 +3,9 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
-# 2025-05-15	njeffrey	Add performance counters
+# 2022-05-25	njeffrey   Script created
+# 2025-05-15	njeffrey   Add performance counters
+# 2026-02-19   njeffrey   Add NCPA compatibility
 
 function Get-Print-Queue-Status {
    #
@@ -12,8 +13,8 @@ function Get-Print-Queue-Status {
    if ($verbose -eq "yes") { Write-Host "" ; Write-Host "Running Get-Print-Queue-Status function" }
    #
    # declare variables
-   $service         = "PrintQueues"				#name of check defined on nagios server
-   $threshold_warn  = 5                                         #warning threshold for outstanding print jobs
+   $service         = "PrintQueues"		#name of check defined on nagios server
+   $threshold_warn  = 5                #warning threshold for outstanding print jobs
    $bad_queue_count = 0 					#initialize counter variable
    $all_queue_count = 0 					#initialize counter variable
    $plugin_output   = ""					#initialize variable
@@ -37,9 +38,23 @@ function Get-Print-Queue-Status {
       # Webex Document Loader
    }
    catch { 
-      Write-Host "ERROR: insufficient permissions to run Get-CimInstance powershell module.  Exiting script."
-      exit 
+      $exit_code = $UNKNOWN
+      $plugin_output = "$service UNKNOWN insufficient permissions to run Get-CimInstance powershell module."
+      #
+      # print output
+      #
+      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
+      return                                                            #break out of function
    }
+   #
+   #
    #
    # if we get this far, the $queues variable contains all the details about the different print queues, including how many jobs are in each queue
    #
@@ -81,10 +96,8 @@ function Get-Print-Queue-Status {
       exit $exit_code
    }
    return                                                            #break out of function
-
 } 											#end of function
 #
 # call the above function
 #
 Get-Print-Queue-Status
-

@@ -4,7 +4,8 @@
 
 # CHANGE LOG
 # ----------
-# 2022-09-23	njeffrey	Script created
+# 2022-09-23	njeffrey   Script created
+# 2026-02-19   njeffrey   Add NCPA compatibility
 
 
 function Get-MPIO-Path-State {
@@ -109,42 +110,52 @@ function Get-MPIO-Path-State {
    # submit nagios passive check results
    #
    if ($active_optimized -eq 0 -and $active_unoptimized -eq 0 -and $standby -eq 0 -and $unavailable -eq 0) {
-      $plugin_state  = $UNKNOWN  
+      $exit_code  = $UNKNOWN  
       $plugin_output = "$service UNKNOWN - Could not detect any MPIO paths.  Please confirm this script is being run with admin privileges.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($active_optimized -gt 0 -and $active_optimized %2 -ne 0) {   #modulus of 2 should return zero if number of paths is an even number
-      $plugin_state  = $WARN 
+      $exit_code  = $WARN 
       $plugin_output = "$service WARN - Active/Optimized paths should be an even number.  Odd numbers indicate a non-redundant configuration.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($active_optimized -lt $active_unoptimized) {
-      $plugin_state  = $WARN  
+      $exit_code  = $WARN  
       $plugin_output = "$service WARN - There are fewer Active/Optimized paths than Active/Unoptimized paths.  Active/Optimized should be at least equal.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($standby -gt 0) {
-      $plugin_state  = $WARN  
+      $exit_code  = $WARN  
       $plugin_output = "$service WARN - Detected $standby paths in standby mode.  Please investigate.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($unavailable -gt 0) {
-      $plugin_state  = $WARN  
+      $exit_code  = $WARN  
       $plugin_output = "$service WARN - Detected $unavailable paths in unavailable state.  Please investigate.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($active_optimized -gt 0 -and $active_optimized -lt 4) {
-      $plugin_state  = $WARN  
+      $exit_code  = $WARN  
       $plugin_output = "$service WARN - there should be at least 4 paths available for sufficient redundancy.  Please add more paths.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($active_optimized -gt 0 -and $active_optimized -eq $active_unoptimized -and $standby -eq 0 -and $unavailable -eq 0) {
-      $plugin_state  = $OK  
+      $exit_code  = $OK  
       $plugin_output = "$service OK - Equal numbers of Active/Optimized and Active/Unoptimized paths indicate an active/passive storage system.  Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
    if ($active_optimized -ge 4 -and $active_unoptimized -ge 0 -and $standby -eq 0 -and $unavailable -eq 0) {
-      $plugin_state  = $OK  
+      $exit_code  = $OK  
       $plugin_output = "$service OK - Active/Optimized:$active_optimized Active/Unoptimized:$active_unoptimized Standby:$standby Unavailable:$unavailable"
    }
+      #
+   # print output
+   #
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
    return                                                            #break out of function
 }
 #
 # call the above function
 #
+
 Get-MPIO-Path-State

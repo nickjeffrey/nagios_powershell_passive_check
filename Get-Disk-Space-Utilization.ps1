@@ -1,10 +1,12 @@
 # powershell function to perform check on local machine
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
+
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
-# 2026-02-19   	njeffrey	add NCPA compatibility
-# 2026-02-19   	njeffrey	add $count_warn $count_crit $count_ok counter variables
+# 2022-05-25   njeffrey   Script created
+# 2026-02-19   njeffrey   add NCPA compatibility
+# 2026-02-19   njeffrey	   add $count_warn $count_crit $count_ok counter variables
 
 
 
@@ -136,3 +138,4 @@ function Get-Disk-Space-Utilization {
 # call the above function
 #
 Get-Disk-Space-Utilization
+

@@ -4,7 +4,8 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
+# 2022-05-25	njeffrey   Script created
+# 2026-02-19   njeffrey   Add NCPA compatibility
 
 
 
@@ -18,6 +19,18 @@ function Get-Veeam-Health {
    #
    # declare variables
    $service       = "Veeam health"
+   $perf_data     = "0"
+   $warn_count    = 0
+   $crit_count    = 0
+   $warn_output   = ""
+   $crit_output   = ""
+   #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3  
+   #
    #
    # Confirm the Veeam.Backup.Manager process is running
    #
@@ -29,7 +42,7 @@ function Get-Veeam-Health {
          if ($verbose -eq "yes") {Write-Host "$processToCheck is running" }
       } else {
          if ($verbose -eq "yes") {Write-Host "WARN: $processToCheck is NOT running" }
-         $plugin_state = 1 								 #0=ok 1=warn 2=critical 3=unknown
+         $exit_code = $WARN 								 #0=ok 1=warn 2=critical 3=unknown
          $plugin_output = "$service WARN - process $processtoCheck is NOT running"
          if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
          if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
@@ -55,13 +68,22 @@ function Get-Veeam-Health {
    if ((Test-Path $dummyFile -PathType leaf)) { 
       if ($verbose -eq "yes") { Write-Host "   using cached result from earlier check" }
       # figure out if the last check result was OK | WARN | CRITICAL
-      $plugin_state  = 3 								#start with a value of UNKNOWN just in case the contents of $dummyFile are corrupt
+      $exit_code  = $UNKNOWN 								#start with a value of UNKNOWN just in case the contents of $dummyFile are corrupt
       $plugin_output = Get-Content $dummyFile  						#read the contents of the text file into a variable
-      if     ( $plugin_output -match "$service OK"       ) { $plugin_state = 0 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service WARN"     ) { $plugin_state = 1 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service CRITICAL" ) { $plugin_state = 2 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service UNKNOWN"  ) { $plugin_state = 3 }	#0=ok 1=warn 2=critical 3=unknown
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+      if     ( $plugin_output -match "$service OK"       ) { $exit_code = $OK       }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service WARN"     ) { $exit_code = $WARN     }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service CRITICAL" ) { $exit_code = $CRITICAL }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service UNKNOWN"  ) { $exit_code = $UNKNOWN  }	#0=ok 1=warn 2=critical 3=unknown
+      #
+      # print output
+      #
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output | $perf_data"
+         exit $exit_code
+      }
       return										#break out of function
    }				
    #
@@ -78,7 +100,7 @@ function Get-Veeam-Health {
    #      }
    #      catch {
    #         Write-Host "ERROR: Could not add VeeamPSSnapin PowerShell snap in"
-   #         $plugin_state = 3 			 					#0=ok 1=warn 2=critical 3=unknown
+   #         $exit_code = $UNKNOWN 			 					#0=ok 1=warn 2=critical 3=unknown
    #         $plugin_output = "UNKNOWN - could not add VeeamPSSnapin PowerShell snap-in to check status of Veeam backup jobs"
    #         Submit-Nagios-Passive-Check
    #         return									#break out of function
@@ -97,10 +119,18 @@ function Get-Veeam-Health {
    }
    catch {
       Write-Host "ERROR: Could not connect to Veeam server with Connect-VBRServer PowerShell module"
-      $plugin_state = 3 			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "UNKNOWN - Could not connect to Veeam server with Connect-VBRServer PowerShell module"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
+      $exit_code = $UNKNOWN 			 					#0=ok 1=warn 2=critical 3=unknown
+      $plugin_output = "$service UNKNOWN - Could not connect to Veeam server with Connect-VBRServer PowerShell module"
+      #
+      # print output
+      #
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output | $perf_data"
+         exit $exit_code
+      }
       return                                                            #break out of function
    }
    #
@@ -250,12 +280,9 @@ function Get-Veeam-Health {
    # This is the "everything is all good" message format
    #
    if ( ($veeam.LicenseStatus -eq "Valid") -and ($veeam.DaystoLicenseExpirationDate -gt 30) -and ($veeam.BackupSuccessCount -gt 0) -and ($veeam.BackupFailedCount -eq 0) -and ($veeam.BackupUnknownCount -eq 0) -and ($veeam.RepoUsageWarn -eq "no") -and ($veeam.RepoUsageCrit -eq "no")) {
-      $plugin_state  = 0			 					#0=ok 1=warn 2=critical 3=unknown
+      $exit_code  = $OK			 					#0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
       $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
    }
    #
    # There are multiple versions of the "something is wrong" message format, depending on exactly what the problem is
@@ -264,101 +291,95 @@ function Get-Veeam-Health {
    # send alert if there are zero scheduled backups
    #
    if ( ($veeam.LicenseStatus -eq "Valid") -and ($veeam.DaystoLicenseExpirationDate -gt 30) -and ($veeam.BackupSuccessCount -eq 0) -and ($veeam.BackupFailedCount -eq 0) -and ($veeam.BackupUnknownCount -eq 0) -and ($veeam.RepoUsageWarn -eq "no") -and ($veeam.RepoUsageCrit -eq "no")) {
-      $plugin_state  = 3 			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service UNKNOWN - There are no scheduled backup jobs.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $warn_count++
+      $warn_output = "$warn_output There are no scheduled backup jobs."
    }
    #
    # send alert if license status is anything other than Valid
    #
    if ( ($veeam.LicenseStatus -ne "Valid") ) {
-      $plugin_state  = 2			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service CRITICAL: Veeam license is not valid.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $crit_count++
+      $crit_output = "$warn_output Veeam license is not valid."
    }
    #
    # send alert if license is about to expire
    #
    if ( ($veeam.LicenseStatus -eq "Valid") -and ($veeam.DaystoLicenseExpirationDate -le 30) -and ($veeam.BackupFailedCount -eq 0) -and ($veeam.BackupUnknownCount -eq 0) ) {
-      $plugin_state  = 1			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARNING: License will expire in " + $veeam.DaysToLicenseExpirationDate + " days.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $warn_count++
+      $warn_output = "$warn_output License will expire in " + $veeam.DaysToLicenseExpirationDate + " days."
    }
    #
    # send alert if vendor support is about to expire (for license types that include support)
    #
    if ( ($veeam.LicenseStatus -eq "Valid") -and ($veeam.DaystoSupportExpirationDate -le 30) -and ( ($veeam.LicenseType -eq "Perpetual") -or ($veeam.LicenseType -eq "Rental") -or ($veeam.LicenseType -eq "Subscription")) ) {
-      $plugin_state  = 1			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARNING: Support will expire in " + $veeam.DaysToSupportExpirationDate + " days.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $warn_count++
+      $warn_output = "$warn_output Support will expire in " + $veeam.DaysToSupportExpirationDate + " days."
    }
    #
    # send alert if there are failed / unknown backup jobs and nearly full backup repository
    #
    if ( (($veeam.BackupFailedCount -gt 0) -or ($veeam.BackupUnknownCount -gt 0)) -and (($veeam.RepoUsageWarn -eq "yes") -or ($veeam.RepoUsageCrit -eq "yes")) ) {
-      $plugin_state  = 1			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARNING: there are failed/unknown Veeam backup jobs and nearly full backup repositories.  Failed job names are:" + $veeam.BackupFailedJobNames + " Unknown result job names are:" + $veeam.BackupUnknownJobNames + " , $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $warn_count++
+      $warn_output = "$warn_output There are failed/unknown Veeam backup jobs and nearly full backup repositories.  Failed job names are:" + $veeam.BackupFailedJobNames + " Unknown result job names are:" + $veeam.BackupUnknownJobNames
    }   
    #
    # send alert if there are failed backup jobs
    #
    if ( ($veeam.BackupFailedCount -gt 0) ) {
-      $plugin_state  = 1			 					#0=ok 1=warn 2=critical 3=unknown
-      $x = $veeam.BackupFailedJobNames
-      $plugin_output = "$service WARNING: there are failed Veeam backup jobs.  Failed job names are:" + $veeam.BackupFailedJobNames + " $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $warn_count++
+      $warn_output = "$warn_output There are failed Veeam backup jobs.  Failed job names are:" + $veeam.BackupFailedJobNames
    }   
    #
    # send alert if there are backup jobs with a completion status of unknown
    #
    if ( ($veeam.BackupUnknownCount -gt 0) ) {
-      $plugin_state  = 1			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARNING: there are Veeam backup jobs with unknown results.  Job names are:" + $veeam.BackupUnknownJobNames + " , $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $warn_count++
+      $warn_output = "$warn_output There are Veeam backup jobs with unknown results.  Job names are:" + $veeam.BackupUnknownJobNames
    }  
    #
    # send alert if there backup repositories that are nearly full
    # 
    if ( ($veeam.RepoUsageCrit -eq "yes") ) {
-      $plugin_state  = 2			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service CRITICAL: Veeam backup repository nearly full. " + $veeam.RepoUsage + ", $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $crit_count++
+      $crit_output = "$crit_output Veeam backup repository nearly full. " + $veeam.RepoUsage
    }   
-   if ( ($veeam.RepoUsageWarn -eq "yes") ) {
-      $plugin_state  = 1			 					#0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARN: Veeam backup repository nearly full. " + $veeam.RepoUsage + ", $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
-   }   
+   if ( ($veeam.RepoUsageWarn -eq "yes") -and ($veeam.RepoUsageCrit -eq "no")  ) {
+      $warn_count++
+      $warn_output = "$warn_output Veeam backup repository nearly full. " + $veeam.RepoUsage
+   }  
+   #
+   # prepend all the $crit_output and $warn_output messages to the $plugin_output
+   #
+   if ( ($crit_count -gt 0) -and ($warn_count -gt 0) ) { 
+      $exit_code = $CRITICAL
+      $plugin_output = "$service CRITICAL $crit_output $warn_output $plugin_output" 
+   }
+   if ( ($crit_count -gt 0) -and ($warn_count -eq 0) ) { 
+      $exit_code = $CRITICAL
+      $plugin_output = "$service CRITICAL $crit_output $plugin_output" 
+   }
+   if ( ($crit_count -eq 0) -and ($warn_count -gt 0) ) { 
+      $exit_code = $WARN
+      $plugin_output = "$service WARN $warn_output $plugin_output" 
+   }
+   if ( ($crit_count -eq 0) -and ($warn_count -eq 0) ) { 
+      $exit_code = $OK
+      $plugin_output = "$service OK $plugin_output" 
+   }
+   #
+   # print output
+   #
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output | $perf_data"
+      exit $exit_code
+   }
+   return                                                            #break out of function
 } 											#end of function
 #
 # call the above function
 #
 Get-Veeam-Health
+

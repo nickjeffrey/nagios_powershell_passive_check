@@ -1,11 +1,10 @@
 # powershell function to perform check on local machine
-# this script can be called by NCPA or executed as a passive check
-# intent: find failed user logins in the past 60 minutes
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
-# 2025-09-18	njeffrey	Add NCPA compatibility
+# 2022-05-25	njeffrey   Script created
+# 2025-09-18	njeffrey   Add NCPA compatibility
 
 function Get-Windows-Failed-Logins {
    #
@@ -102,6 +101,7 @@ function Get-Windows-Failed-Logins {
 # call the above function
 #
 Get-Windows-Failed-Logins
+
 
 
 

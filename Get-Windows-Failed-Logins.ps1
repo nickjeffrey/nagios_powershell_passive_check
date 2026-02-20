@@ -18,15 +18,34 @@ function Get-Windows-Failed-Logins {
    $threshold_warn     = 10
    $threshold_crit     = 100
    $bad_users          = @()					#define empty array
+   #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3        
 
    try { 
       # Query the server for the login events. 
       $colEvents = Get-WinEvent -FilterHashtable @{logname='Security'; ID=4625 ; StartTime=(Get-Date).AddHours(-1)} -ErrorAction SilentlyContinue
    }
    catch { 
-      Write-Host "ERROR: insufficient permissions to run Get-WinEvent powershell module.  Exiting script."
-      exit 
+      $exit_code = $UNKNOWN
+      $plugin_output = "$service UNKNOWN - insufficient permissions to run Get-WinEvent powershell module."
+      #
+      # print output
+      #
+      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
+      return
    }
+   #
    #
    # If we get this far, the $colEvents variable contains all the Windows Event Log failed logins with ID=4625
    # Iterate through the collection of login events. 
@@ -45,19 +64,19 @@ function Get-Windows-Failed-Logins {
    }
    $bad_users = $bad_users | Sort-Object | Get-Unique               #sort the array and eliminate duplicates
    if ($failed_login_count -eq 0) {
-      $plugin_state = 0 								 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK 								 #0=ok 1=warn 2=critical 3=unknown
       $common_output_data = "$service OK - $failed_login_count failed logins in last hour"
    }
    if ( ($failed_login_count -gt 0) -and ($failed_login_count -lt $threshold_warn) ) {
-      $plugin_state = 0 								 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK 								 #0=ok 1=warn 2=critical 3=unknown
       $common_output_data = "$service OK - $failed_login_count failed logins in last hour.  This is more than zero, but low enough to be acceptable.  Usernames:$bad_users"
    }
    if ($failed_login_count -ge $threshold_warn) {
-      $plugin_state = 1 								 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $WARN 								 #0=ok 1=warn 2=critical 3=unknown
       $common_output_data = "$service WARN - $failed_login_count failed logins in last hour.  Possible brute force attack. Usernames:$bad_users"
    }
    if ($failed_login_count -ge $threshold_crit) {
-      $plugin_state = 2 								 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL 								 #0=ok 1=warn 2=critical 3=unknown
       $common_output_data = "$service CRITICAL - $failed_login_count failed logins in last hour.  Possible brute force attack. Usernames:$bad_users"
    }
    #
@@ -83,6 +102,7 @@ function Get-Windows-Failed-Logins {
 # call the above function
 #
 Get-Windows-Failed-Logins
+
 
 
 

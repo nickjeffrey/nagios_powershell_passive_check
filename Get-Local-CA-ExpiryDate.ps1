@@ -1,10 +1,10 @@
-
 # powershell function to perform check on local machine
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
 
 # CHANGE LOG
 # ----------
-# 2023-02-05	njeffrey	   Script created
-# 2023-04-10	njeffrey	   Change $plugin_output_maxsize from 8192 to 4096 to avoid cluttering web interface
+# 2023-02-05	njeffrey   Script created
+# 2023-04-10	njeffrey   Change $plugin_output_maxsize from 8192 to 4096 to avoid cluttering web interface
 # 2026-02-19   njeffrey   Add NCPA compatibility
 
 
@@ -230,4 +230,5 @@ function Get-Local-CA-ExpiryDate {
 # call the above function
 #
 Get-Local-CA-ExpiryDate
+
 

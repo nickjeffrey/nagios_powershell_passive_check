@@ -1,4 +1,5 @@
 # powershell function to perform check on local machine
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
 
 # CHANGE LOG
 # ----------
@@ -70,5 +71,6 @@ function Get-TSM-Client-Backup-Age {
 # call the above function
 #
 Get-TSM-Client-Backup-Age
+
 
 

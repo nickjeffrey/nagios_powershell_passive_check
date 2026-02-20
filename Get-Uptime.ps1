@@ -1,4 +1,5 @@
 # powershell function to perform check on local machine
+# this script can be called by NCPA, or submitted as a passive check from the master nagios_passive_check.ps1 script
 
 # CHANGE LOG
 # ----------
@@ -68,3 +69,4 @@ function Get-Uptime {
 # call the above function
 #
 Get-Uptime
+

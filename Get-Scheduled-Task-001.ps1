@@ -1,10 +1,9 @@
 # powershell function to perform check on local machine
-# this script is called from the master nagios_passive_check.ps1 script
-# the results of this check are submitted to the nagios server as a passive check via HTTP
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
+# 2022-05-25	njeffrey   Script created
+# 2026-02-19   njeffrey   Add NCPA compatibility
 
 function Get-Scheduled-Task-001 {
    #
@@ -21,12 +20,19 @@ function Get-Scheduled-Task-001 {
    #$TaskName = "nagios_passive_check"            #name of the scheduled task, get with schtasks.exe on monitored host
    $service = "Task $TaskName"                    #name of check defined on nagios server
    #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3        
+   #
+   $
    try {
       $TaskInfo = get-scheduledtaskinfo -TaskName $TaskName
    }
    catch {
       Write-Host "Access denied.  Please check your permissions."
-      $plugin_state = 3                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $UNKNOWN                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service UNKNOWN - Could not find scheduled task $TaskName.  Please confirm the scheduled task name is correct, and check permissions of user executing this script."
       if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
       if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
@@ -52,33 +58,35 @@ function Get-Scheduled-Task-001 {
    #
    if ($verbose -eq "yes") { Write-Host "   TaskName=$TaskName, LastRunTime=$age_in_hours hours ago, LastTaskResult=$LastTaskResult" }
    #
-   # submit nagios passive check results
-   #
    #
    if ( $age_in_hours -le '24' -and $LastTaskResult -eq '0') { 	#task is ok
-      $plugin_state = 0						 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $OK						 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - Scheduled task $TaskName ran successfully at $LastRunTime"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
    }	
    if ( $age_in_hours -gt '24' ) { 						#last task execution time was more than 24 hours ago
-      $plugin_state = 1 								 #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $WARN 								 #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service WARN - Scheduled task $TaskName last execution time was was $age_in_hours hours ago at $LastRunTime."
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
    }	
    # Potential bug: what if the task is currently running?  The return code will be >0 for the brief period the task is running.
    if ( $LastTaskResult -gt '0' ) {
-      $plugin_state = 2                          #0=ok 1=warn 2=critical 3=unknown
+      $exit_code = $CRITICAL                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - Scheduled task $TaskName failed, please check status of this scheduled task"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
    }
+   #
+   # print output
+   #
+   if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
+   return      #break out of function
 }
 #
 # call the above function
 #
 Get-Scheduled-Task-001
+

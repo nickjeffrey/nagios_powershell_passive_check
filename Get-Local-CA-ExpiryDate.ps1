@@ -1,12 +1,11 @@
 
 # powershell function to perform check on local machine
-# this script is called from the master nagios_passive_check.ps1 script
-# the results of this check are submitted to the nagios server as a passive check via HTTP
 
 # CHANGE LOG
 # ----------
-# 2023-02-05	njeffrey	Script created
-# 2023-04-10	njeffrey	Change $plugin_output_maxsize from 8192 to 4096 to avoid cluttering web interface
+# 2023-02-05	njeffrey	   Script created
+# 2023-04-10	njeffrey	   Change $plugin_output_maxsize from 8192 to 4096 to avoid cluttering web interface
+# 2026-02-19   njeffrey   Add NCPA compatibility
 
 
 
@@ -56,7 +55,11 @@ function Get-Local-CA-ExpiryDate {
    $Certificates_AlreadyExpired     = ""   #start with blank list to be used in output
    $hash = @{}                             #create an empty hash to hold all the certificate details
    #
-   #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3       
    #
    # This check only needs to be run on a daily basis, so check to see if a dummy file containing the output exists.
    $DestDir = "C:\temp"
@@ -76,19 +79,31 @@ function Get-Local-CA-ExpiryDate {
          Remove-Item $dummyFile
       }
    }
+   #
+   # Look for a cached copy of the output
    # If the file exists, print the output and exit, which essentially skips this iteration of the check.
+   #
    if ((Test-Path $dummyFile -PathType leaf)) { 
       if ($verbose -eq "yes") { Write-Host "   using cached result from earlier check" }
       # figure out if the last check result was OK | WARN | CRITICAL
-      $plugin_state  = 3 								#start with a value of UNKNOWN just in case the contents of $dummyFile are corrupt
+      $exit_code  = $UNKNOWN 								#start with a value of UNKNOWN just in case the contents of $dummyFile are corrupt
       $plugin_output = Get-Content $dummyFile  						#read the contents of the text file into a variable
-      if     ( $plugin_output -match "$service OK"       ) { $plugin_state = 0 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service WARN"     ) { $plugin_state = 1 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service CRITICAL" ) { $plugin_state = 2 }	#0=ok 1=warn 2=critical 3=unknown
-      elseif ( $plugin_output -match "$service UNKNOWN"  ) { $plugin_state = 3 }	#0=ok 1=warn 2=critical 3=unknown
-      if ($verbose -eq "yes") { Write-Host $plugin_output }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return										#break out of function
+      if     ( $plugin_output -match "$service OK"       ) { $exit_code = $OK       }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service WARN"     ) { $exit_code = $WARN     }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service CRITICAL" ) { $exit_code = $CRITICAL }	#0=ok 1=warn 2=critical 3=unknown
+      elseif ( $plugin_output -match "$service UNKNOWN"  ) { $exit_code = $UNKNOWN  }	#0=ok 1=warn 2=critical 3=unknown
+      #
+      # print output
+      #
+      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
+      return                                                            #break out of function
    }				
    #
    # If we get this far, no dummy text file exists with the previous check output, so perform the check.
@@ -165,19 +180,19 @@ function Get-Local-CA-ExpiryDate {
    # Figure out what result will be sent to nagios
    #
    if ( $Certificates_NotExpired -match "\S" ) {   # \S means any non-whitespace character
-      $plugin_state  = 0			     #0=ok 1=warn 2=critical 3=unknown
+      $exit_code  = $OK			     #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service OK - $Certificates_NotExpired"
    }
    if ( $Certificates_SoonToExpire -match "\S" ) {
-      $plugin_state  = 1			     #0=ok 1=warn 2=critical 3=unknown
+      $exit_code  = $WARN			     #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service WARN - $Certificates_SoonToExpire $Certificates_NotExpired"
    }
    if ( $Certificates_AlreadyExpired -match "\S" ) {
-      $plugin_state  = 3			     #0=ok 1=warn 2=critical 3=unknown
+      $exit_code  = $CRITICAL			     #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service CRITICAL - $Certificates_AlreadyExpired $Certificates_SoonToExpire $Certificates_NotExpired"  #note that we include CRITICAL messages first, followed by WARN messages, followed by OK
    }
    #
-   # send the output to nagios
+   # sSometimes these messages are huge and exceed nagios length limits, truncate if needed
    #
    $plugin_output_maxsize = 4096
    if ($plugin_output.Length -gt $plugin_output_maxsize) { 
@@ -198,12 +213,21 @@ function Get-Local-CA-ExpiryDate {
       $plugin_output = $plugin_output.Substring(0,$plugin_output_maxsize-50)  #truncate message so it does not exceed nagios maximum message size  
       $plugin_output = "$plugin_output MESSAGE TRUNCATED DUE TO EXCESSIVE LENGTH"
    }
+   #
+   # print output
+   #
    if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-   $plugin_output | Out-File $dummyFile						#write the output to a dummy file that can be re-used to speed up subsequent checks
-   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-   return   
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
+   return                                                            #break out of function
 } 		#end of function
 #
 # call the above function
 #
 Get-Local-CA-ExpiryDate
+

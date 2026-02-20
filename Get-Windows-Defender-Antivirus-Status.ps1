@@ -4,16 +4,30 @@
 
 # CHANGE LOG
 # ----------
-# 2022-05-25	njeffrey	Script created
+# 2022-05-25	njeffrey   Script created
+# 2026-02-19   njeffrey   Add NCPA compatibility
+
 
 function Get-Windows-Defender-Antivirus-Status {
    #
+   $verbose = "no"
    if ($verbose -eq "yes") { Write-Host "" ; Write-Host "Running Get-Windows-Defender-Antivirus-Status function" }
    #
    # declare variables
-   $service = "Defender Antivirus" 					#name of check defined on nagios server
-   $threshold_warn     = 7
-   $threshold_crit     = 30
+   $service        = "Defender Antivirus" 	#name of check defined on nagios server
+   $threshold_warn = 7
+   $threshold_crit = 30
+   $warn_count     = 0
+   $crit_count     = 0
+   $warn_output    = ""
+   $crit_output    = ""
+   #
+   # nagios exit codes
+   $OK       = 0                            	
+   $WARN     = 1                          	
+   $CRITICAL = 2                        
+   $UNKNOWN  = 3        
+   #
    #
    try { 
       # Query the server for the login events. 
@@ -58,9 +72,22 @@ function Get-Windows-Defender-Antivirus-Status {
       # PSComputerName                  :
    }
    catch { 
-      Write-Host "ERROR: insufficient permissions to run Get-MpComputerStatus powershell module.  Exiting script."
-      exit 
+      $exit_code = $UNKNOWN
+      $plugin_output = "$service UNKNOWN insufficient permissions to run Get-MpComputerStatus powershell module."
+      #
+      # print output
+      #
+      if ($verbose -eq "yes") { Write-Host "   Submitting nagios check results: $plugin_output" }
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
+      return   
    }
+   #
    #
    # if we get this far, the $defender variable contains all the details about the Microsoft Defender antivirus
    #
@@ -78,43 +105,60 @@ function Get-Windows-Defender-Antivirus-Status {
    #
    # 
    if ( ($defender.AntivirusEnabled -eq "True") -and ($defender.ComputerState -eq 0) -and ($defender.LastSignatureUpdate -lt $threshold_warn) -and ($defender.LastQuickScan -lt $threshold_warn) ) {
-      $plugin_state = 0 								 #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service OK - $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $exit_code = $OK 								 #0=ok 1=warn 2=critical 3=unknown
+      $plugin_output = "$plugin_output"
    }
    if ($defender.AntivirusEnabled -ne "True") {
-      $plugin_state = 2 								 #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service CRITICAL - Defender antivirus not Enabled.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $crit_count++
+      $crit_output = "$crit_output Defender antivirus not Enabled."
    }
    if ($defender.ComputerState -ne 0) {							#0=CLEAN 1=PENDING_FULL_SCAN 2=PENDING_REBOOT
-      $plugin_state = 1 								 #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARN - Defender ComputerState needs attention.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $warn_count++
+      $warn_output = "$warn_output Defender ComputerState needs attention."
    }
    if ($defender.LastSignatureUpdate -ge $threshold_crit) {
-      $plugin_state = 2 								 #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service CRITICAL - Defender LastSignatureUpdate is more than $threshold_warn days old.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      $crit_count++
+      $crit_output = "$crit_output Defender LastSignatureUpdate is more than $threshold_warn days old."
    }
-   if ($defender.LastSignatureUpdate -ge $threshold_warn) {
-      $plugin_state = 1 								 #0=ok 1=warn 2=critical 3=unknown
-      $plugin_output = "$service WARN - Defender LastSignatureUpdate is more than $threshold_warn days old.  $plugin_output"
-      if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+   if ( ($defender.LastSignatureUpdate -ge $threshold_warn) -and ($defender.LastSignatureUpdate -lt $threshold_crit) ) {
+      $warn_count++
+      $warn_output = "$warn_output Defender LastSignatureUpdate is more than $threshold_warn days old."
    }
+   #
+   # prepend all the $crit_output and $warn_output messages to the $plugin_output
+   #
+   if ( ($crit_count -gt 0) -and ($warn_count -gt 0) ) { 
+      $exit_code = $CRITICAL
+      $plugin_output = "$service CRITICAL $crit_output $warn_output $plugin_output" 
+   }
+   if ( ($crit_count -gt 0) -and ($warn_count -eq 0) ) { 
+      $exit_code = $CRITICAL
+      $plugin_output = "$service CRITICAL $crit_output $plugin_output" 
+   }
+   if ( ($crit_count -eq 0) -and ($warn_count -gt 0) ) { 
+      $exit_code = $WARN
+      $plugin_output = "$service WARN $warn_output $plugin_output" 
+   }
+   if ( ($crit_count -eq 0) -and ($warn_count -eq 0) ) { 
+      $exit_code = $OK
+      $plugin_output = "$service OK $plugin_output" 
+   }
+   #
+   # print output
+   #
+   if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
+   if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+      $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+      Submit-Nagios-Passive-Check   #call function to send results to nagios
+   } else {
+      Write-Output "$plugin_output"
+      exit $exit_code
+   }
+   return   #break out of function
 } 											#end of function
 #
 # call the above function
 #
 Get-Windows-Defender-Antivirus-Status
+
 

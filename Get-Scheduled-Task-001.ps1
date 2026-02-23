@@ -26,7 +26,7 @@ function Get-Scheduled-Task-001 {
    $CRITICAL = 2                        
    $UNKNOWN  = 3        
    #
-   $
+   #
    try {
       $TaskInfo = get-scheduledtaskinfo -TaskName $TaskName
    }
@@ -98,6 +98,7 @@ function Get-Scheduled-Task-001 {
 # call the above function
 #
 Get-Scheduled-Task-001
+
 
 
 

@@ -18,9 +18,8 @@ function Get-Scheduled-Task-001 {
    # This function name is Get-Scheduled-Task-###, with the intent that there may be a -001, -002, -003, etc if you have multiple tasks to check
    #
    # declare variables
-   $TaskName = "GoogleUpdateTaskMachineCore"      #name of the scheduled task, get with schtasks.exe on monitored host
-   $TaskName = "nagios_passive_check"             #name of the scheduled task, get with schtasks.exe on monitored host
-   #$TaskName = "testtask"                         #name of the scheduled task, get with schtasks.exe on monitored host
+   #$TaskName = "GoogleUpdateTaskMachineCore"      #name of the scheduled task, get with schtasks.exe on monitored host
+   $TaskName = "testtask"                         #name of the scheduled task, get with schtasks.exe on monitored host
    $service = "Task $TaskName"                    #name of check defined on nagios server
    #
    # nagios exit codes
@@ -105,5 +104,6 @@ function Get-Scheduled-Task-001 {
 # call the above function
 #
 Get-Scheduled-Task-001
+
 
 

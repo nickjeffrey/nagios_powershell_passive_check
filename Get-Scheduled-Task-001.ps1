@@ -18,7 +18,6 @@ function Get-Scheduled-Task-001 {
    # declare variables
    $TaskName = "GoogleUpdateTaskMachineCore"      #name of the scheduled task, get with schtasks.exe on monitored host
    $TaskName = "testtask"                         #name of the scheduled task, get with schtasks.exe on monitored host
-   #$TaskName = "nagios_passive_check"            #name of the scheduled task, get with schtasks.exe on monitored host
    $service = "Task $TaskName"                    #name of check defined on nagios server
    #
    # nagios exit codes
@@ -35,9 +34,18 @@ function Get-Scheduled-Task-001 {
       Write-Host "Access denied.  Please check your permissions."
       $exit_code = $UNKNOWN                          #0=ok 1=warn 2=critical 3=unknown
       $plugin_output = "$service UNKNOWN - Could not find scheduled task $TaskName.  Please confirm the scheduled task name is correct, and check permissions of user executing this script."
+      #
+      # print output
+      #
       if ($verbose -eq "yes") { Write-Host "   Submitting nagios passive check results: $plugin_output" }
-      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { Submit-Nagios-Passive-Check}   #call function to send results to nagios
-      return                                                            #break out of function
+      if (Get-Command Submit-Nagios-Passive-Check -errorAction SilentlyContinue) { 
+         $plugin_state = $exit_code    #used by Submit-Nagios-Passive-Check
+         Submit-Nagios-Passive-Check   #call function to send results to nagios
+      } else {
+         Write-Output "$plugin_output"
+         exit $exit_code
+      }
+      return      #break out of function
    }
    #
    # We only get this far if $TaskInfo contains data
@@ -90,5 +98,6 @@ function Get-Scheduled-Task-001 {
 # call the above function
 #
 Get-Scheduled-Task-001
+
 
 
